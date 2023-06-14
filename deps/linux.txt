@@ -1,0 +1,15 @@
+util-linux
+# util-linux-user
+zsh
+git
+curl
+wget
+jq
+lynx
+python3
+python3-pip
+zip
+unzip
+dnsutils
+bind-utils
+whois
