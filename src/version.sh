@@ -1,0 +1,10 @@
+__repo_name__='arsenal'
+__description__='A set of scripts and tools for humans.'
+__url__='https://github.com/xransum/arsenal/'
+__version__='0.1.0'
+__build__=0x022600
+__author__='Kevin Haas'
+__author_email__='me@kevin-haas.com'
+__license__='Apache 2.0'
+__copyright__='Copyright (C) 2023 Kevin Haas'
+__cake__='\u2728 \U0001f370 \u2728'

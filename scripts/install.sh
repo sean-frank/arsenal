@@ -231,7 +231,7 @@ fmt_error() {
   printf '%sError: %s%s\n' "${BOLD}${RED}" "$*" "$RESET" >&2
 }
 
-setup_color() {
+setup_colors() {
   # Only use colors if connected to a terminal
   if ! is_tty; then
     RAINBOW=""
@@ -479,7 +479,7 @@ main() {
     shift
   done
 
-  setup_color
+  setup_colors
   
   if [ -d "$ARSENAL_BASH" ]; then
     echo "${YELLOW}The \$ARSENAL_BASH folder already exists ($ARSENAL_BASH).${RESET}"

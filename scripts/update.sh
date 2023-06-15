@@ -185,7 +185,7 @@ fmt_underline() {
   is_tty && printf '\033[4m%s\033[24m\n' "$*" || printf '%s\n' "$*"
 }
 
-setup_color() {
+setup_colors() {
   # Only use colors if connected to a terminal
   if ! is_tty; then
     RAINBOW=""
@@ -236,7 +236,7 @@ print_header() {
   printf '%s\__,_/_/  /____/\___/_/ /_/\__,_/_/   %s\n' $RED $RESET
 }
 
-setup_color
+setup_colors
 
 git remote -v | while read remote url extra; do
   case "$url" in
