@@ -1,5 +1,8 @@
 #!/usr/bin/env sh
 
+# TODO: Add installer scripts to ~/bin/ with arsenal_<update|uninstall> so that
+# they can be called from anywhere and easily updated.
+
 SOURCE=${BASH_SOURCE[0]}
 # resolve $SOURCE until the file is no longer a symlink
 while [ -L "$SOURCE" ]; do
