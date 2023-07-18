@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 #
 # This script should be run via curl:
 #   sh -c "$(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)"
@@ -77,6 +77,7 @@ CHSH=${CHSH:-yes}
 RUNBASH=${RUNBASH:-yes}
 KEEP_BASHRC=${KEEP_BASHRC:-no}
 FORCE=${FORCE:-no}
+SKIP_OMZ=${SKIP_OMZ:-no}
 
 command_exists() {
   command -v "$@" >/dev/null 2>&1
@@ -404,22 +405,53 @@ setup_dependencies() {
     exit 1
   fi
   
-  if command_exists apt-get; then
-    if user_can_sudo; then
-      sudo apt-get update -y 2>&1 >/dev/null
-      sudo apt-get install -y $DEPENDENCIES 2>&1 >/dev/null
-    else
-      apt-get update -y 2>&1 >/dev/null
-      apt-get install -y $DEPENDENCIES 2>&1 >/dev/null
-    fi
-  elif command_exists yum; then
-    if user_can_sudo; then
-      sudo yum install -y $DEPENDENCIES 2>&1 >/dev/null
-    else
-      yum install -y $DEPENDENCIES 2>&1 >/dev/null
-    fi
+  printf '%s\n' "Download package information from all package sources... This may take a few minutes."
+  if user_can_sudo; then
+     # Debian
+     if command_exists apt-get; then
+        sudo apt-get update -y 2>&1 >/dev/null
+     # CentOS
+     elif command_exists yum; then
+        sudo yum update -y 2>&1 >/dev/null
+        sudo yum upgrade -y 2>&1 >/dev/null
+     fi
+  else
+     # Debian
+     if command_exists apt-get; then
+        apt-get update -y 2>&1 >/dev/null
+     # centos
+     elif command_exists yum; then
+        yum update -y 2>&1 >/dev/null
+        yum upgrade -y 2>&1 >/dev/null
+     fi
+  fi
+
+  printf '%s\n' "Installing packages dependencies... This may take a few minutes."
+  for dep in $DEPENDENCIES; do
+  if user_can_sudo; then
+     # Debian
+     if command_exists apt-get; then
+        sudo apt-get install -y $dep 2>&1 >/dev/null
+     # CentOS
+     elif command_exists yum; then
+        sudo yum install -y $dep 2>&1 >/dev/null
+     fi
+  else
+     # Debian
+     if command_exists apt-get; then
+        apt-get install -y $dep 2>&1 >/dev/null
+     # centos
+     elif command_exists yum; then
+        #yum install -y $DEPENDENCIES 2>&1 >/dev/null
+        yum install -y $dep 2>&1 >/dev/null
+     fi
   fi
   
+  if [ $? -ne 0 ]; then
+        printf '%s\n' "  [?] Warning, there was an issue installing $dep..."
+  fi
+  done
+
   if [ $? -ne 0 ]; then
     if user_can_sudo; then
       fmt_error "Failed to install dependencies. Please install them manually."
@@ -431,6 +463,23 @@ setup_dependencies() {
       fmt_error "Failed to install dependencies. Please run this script as root."
     fi
   fi
+}
+
+setup_oh_my_zsh() {
+    if [ "$SKIP_OMZ" = yes ]; then
+        printf '%s\n' "Skipping oh-my-zsh installation..."
+       exit 0
+    fi
+
+   printf '%s\n' "Installing oh-my-zsh... This may take a few minutes."
+
+   if [ $? -ne 0 ]; then
+      if user_can_sudo; then
+         fmt_error "Failed to install oh-my-zsh. Please install them manually."
+      else
+          fmt_error "Failed to install oh-my-zsh. Please run this script as root."
+      fi
+   fi
 }
 
 print_header() {
@@ -474,6 +523,7 @@ main() {
       --unattended) RUNBASH=no; CHSH=no ;;
       --skip-chsh) CHSH=no ;;
       --keep-bashrc) KEEP_BASHRC=yes ;;
+      --no-omz) SKIP_OMZ=yes ;;
       --force) FORCE=yes ;;
     esac
     shift
@@ -525,6 +575,8 @@ EOF
   fi
 
   setup_dependencies
+  setup_oh_my_zsh
+  exit 0
   setup_arsenal
   setup_bashrc
 

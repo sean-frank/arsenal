@@ -3,6 +3,8 @@
 import() {
     for path in "$@"; do
         filepath="$(readlink -f "$path")"
+        echo "$filepath"
+
         if [[ "$filepath" != *"/src/"* ]]; then
             filepath="$(readlink -f "src/$path")"
         fi
