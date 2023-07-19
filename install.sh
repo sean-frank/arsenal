@@ -630,12 +630,6 @@ setup_dot_rc() {
     # Backup the user's original dot file
     backup_dot_file "$dot_file"
 
-    # Append the Arsenal script path to the dot file if not already present
-    if ! grep -q -E "PATH=.*$ARSENAL_BASH/bin" "$dot_file"; then
-        echo "${YELLOW}Added Arsenal scripts to PATH in ${dot_file}${RESET}"
-        echo "export PATH=\"\$PATH:$ARSENAL_BASH/bin\"" >>"$dot_file"
-    fi
-
     # Check if the dot file is sourced from .bash_profile or .profile
     if [[ "$dot_file" == *".bashrc" ]]; then
         local primary_rc_file
@@ -764,10 +758,10 @@ install_oh_my_zsh() {
 
     printf '%s\n' "Enabling default plugins, to enable more plugins, please edit ~/.zshrc manually."
     # Set default enabled plugins
-    if ! grep -qE "plugins=(git)" "$HOME/.zshrc"; then
+    if ! grep -qE "plugins=\(.*\)" "$HOME/.zshrc"; then
         echo 'plugins=(git zsh-autosuggestions zsh-completions zsh-autocomplete)' >>"$HOME/.zshrc"
     else
-        sed -i "s/^plugins=(.+?)/plugins=(git zsh-autosuggestions zsh-completions zsh-autocomplete)/" "$HOME/.zshrc"
+        sed -i "s/^plugins=\(.*\)$/plugins=(git zsh-autosuggestions zsh-completions zsh-autocomplete)/g" "$HOME/.zshrc"
     fi
 
     # Enforce updates
@@ -929,6 +923,12 @@ install_arsenal() {
             rm "$symlink"
         fi
     done
+
+    # Append the Arsenal script path to the dot file if not already present
+    if ! grep -q -E "PATH=.*$ARSENAL_BASH/bin" "$dot_file"; then
+        echo "${YELLOW}Added Arsenal scripts to PATH in ${dot_file}${RESET}"
+        echo "export PATH=\"\$PATH:$ARSENAL_BASH/bin\"" >>"$dot_file"
+    fi
 
     # Exit installation directory
     cd "$CURRENT_DIR"
