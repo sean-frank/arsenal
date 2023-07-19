@@ -422,8 +422,7 @@ install_dependencies() {
     fi
 
     printf '%s\n' "Installing dependencies... This may take a few minutes."
-    #DEPENDENCIES_URL="$RAW_REMOTE/deps/linux.txt"
-    DEPENDENCIES_URL="http://vm-ubuntu:8000/deps/linux.txt"
+    DEPENDENCIES_URL="$RAW_REMOTE/deps/linux.txt"
     DEPENDENCIES=$(curl -fsSL "$DEPENDENCIES_URL" | sed 's/#.*//' | tr '\n' ' ' | tr -s ' ')
 
     if [ -z "$DEPENDENCIES" ]; then
