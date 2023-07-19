@@ -720,9 +720,12 @@ install_oh_my_zsh() {
 
     setup_dot_rc
 
+    echo
+    printf '%s\n' "Copying zsh rc config from templates..."
     # Install oh-my-zsh configs
     cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
 
+    echo
     # Install oh-my-zsh plugins
     printf '%s\n' "Installing oh-my-zsh plugins..."
     set -- "https://github.com/marlonrichert/zsh-autocomplete" \
@@ -747,6 +750,7 @@ install_oh_my_zsh() {
         fi
     done
 
+    echo
     echo "Setting configs, please wait..."
     echo "Setting theme to mh..."
     # Set theme to mh, it's the least obstructive and doesn't require
@@ -823,6 +827,7 @@ install_arsenal() {
 
     # Check for --force
     if [ "$FORCE" = yes ]; then
+        echo "Arsenal forced install, nuking previous version..."
         rm -rf "$ARSENAL_BASH"
     fi
 
@@ -830,6 +835,7 @@ install_arsenal() {
 
     # Check if "$ARSENAL_BASH" is already cloned
     if [ ! -d "$ARSENAL_BASH" ]; then
+        echo "No $ARSENAL_BASH, initializing local repository..."
         git init "$ARSENAL_BASH" &&
             cd "$ARSENAL_BASH" &&
             git config core.eol lf &&
@@ -848,14 +854,18 @@ install_arsenal() {
 
     # Check if the "origin" remote already exists
     if ! git remote | grep -q "origin"; then
+        echo "Configuring remote origin to $REMOTE"
         git remote add origin "$REMOTE"
     fi
 
+    echo "Pulling latest changes from remote"
     git fetch --depth=1 origin
 
     if git rev-parse --verify --quiet "origin/$BRANCH" >/dev/null; then
+        echo "Checking out to remote branch '$BRANCH'"
         git checkout -b "$BRANCH" "origin/$BRANCH" || {
             [ ! -d "$ARSENAL_BASH" ] || {
+                echo "Installation failed, clearing all installs"
                 cd "$CURRENT_DIR"
                 rm -rf "$ARSENAL_BASH" 2>/dev/null
             }
@@ -874,6 +884,7 @@ install_arsenal() {
         mkdir -p "$ARSENAL_BASH/bin"
     fi
 
+    echo "Generating symlink farm from Arsenal sources, '$ARSENAL_BASH/src'..."
     # Go through each of the scripts within $ARSENAL_BASH/src, taking each of them
     # checking which have valid shebangs, and then symlinking them to $ARSENAL_BASH/bin
     # with the script name without the extension. This allows us to update the scripts
@@ -888,16 +899,23 @@ install_arsenal() {
             # Make the script executable if it's not
             if [ ! -x "$script" ]; then
                 chmod +x "$script"
+            else
+                echo "Script '$script' is already executable, skipping..."
             fi
 
             # If the script doesn't exist, create it
             if [ ! -f "$script_path" ]; then
                 echo "Adding to symlink farm: $script_name"
                 ln -s "$script" "$script_path"
+            else
+                echo "There was a possible script collision, symlink exists already for '$script' to '$script_name'."
             fi
+        else
+            echo "Script '$script' does not contain a valid shebang, skipping..."
         fi
     done
 
+    echo "Validating symlinks from symlink farm for any discrepancies..."
     # Locate all symlinks from $ARSENAL_BASH/bin and remove those that don't have
     # a corresponding script that is a valid executable file in $ARSENAL_BASH/src
     for symlink in "$ARSENAL_BASH/bin"/*; do
@@ -914,6 +932,7 @@ install_arsenal() {
 
     # Exit installation directory
     cd "$CURRENT_DIR"
+    echo
 }
 
 TOYBOX_REPO='drampil/toy-box'
@@ -970,6 +989,8 @@ install_toybox_scripts() {
             ln -s "$script_path" "$ARSENAL_BASH/bin/$script_name"
         fi
     done
+
+    echo
 }
 
 # Unified way of setting sudo to a variable
