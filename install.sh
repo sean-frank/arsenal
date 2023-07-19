@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
 # This script should be run via curl:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/install.sh)
 # or via wget:
-#   bash <(wget -qO- https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)
+#   bash <(wget -qO- https://raw.githubusercontent.com/xransum/arsenal/master/install.sh)
 # or via fetch:
-#   bash <(fetch -o - https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)
+#   bash <(fetch -o - https://raw.githubusercontent.com/xransum/arsenal/master/install.sh)
 #
 # As an alternative, you can first download the install script and run it afterwards:
-#   wget https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh
+#   wget https://raw.githubusercontent.com/xransum/arsenal/master/install.sh
 #   sh install.sh
 #
 # You can tweak the install behavior by setting variables when running the script. For
@@ -36,7 +36,7 @@
 # For example:
 #   bash install.sh --unattended
 # or:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh) --unattended
+#   bash <(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/install.sh) --unattended
 #
 set -e
 
@@ -414,10 +414,10 @@ running_shell() {
     fi
 }
 
-install_dependencies() {
+install_linux_dependencies() {
     # Skip setup if the user wants or stdin is closed (not running interactively).
     if [ "$NO_DEPS" = yes ]; then
-        printf '%s\n' "Skipping dependencies installation."
+        printf '%s\n' "Skipping linux dependencies installation."
         return
     fi
 
@@ -494,8 +494,70 @@ install_dependencies() {
     done
 
     if [ $? -ne 0 ]; then
-        fmt_error "Failed to install dependencies. Please install them manually."
+        fmt_error "Failed to install linux dependencies. Please install them manually."
         exit 1
+    fi
+
+    echo
+}
+
+install_python_dependencies() {
+    # Skip setup if the user wants or stdin is closed (not running interactively).
+    if [ "$NO_DEPS" = yes ]; then
+        printf '%s\n' "Skipping python dependencies installation."
+        return
+    fi
+
+    printf '%s\n' "Installing dependencies... This may take a few minutes."
+    DEPENDENCIES_URL="$RAW_REMOTE/deps/requirements.txt"
+    DEPENDENCIES=$(curl -fsSL "$DEPENDENCIES_URL")
+    
+    if [ -z "$DEPENDENCIES" ]; then
+        fmt_error "Failed to fetch dependencies list from $DEPENDENCIES_URL"
+        return
+    fi
+
+    if ! (command_exists python3 || command_exists pip3); then
+        fmt_error "Sorry, Arsenal only supports Python3 at this time. Skipping..."
+        return
+    fi
+    
+    printf '%s\n' "Installing Python package dependencies..."
+
+    # Set pip path to pip3 if it exists, otherwise python3 -m pip
+    pip=
+    if command_exists pip3; then
+        pip="pip3"
+    # Require python3 and pip3 to be installed
+    # TODO: Add verification that python3 has the pip module installed
+    elif command_exists python3; then
+        pip="python3 -m pip"
+    else
+        fmt_error "Sorry, Arsenal requires pip3 or python3 to be installed. Skipping..."
+        return
+    fi
+
+    # Update pip to latest version
+    echo -n "Updating pip... "
+    if $pip install --upgrade --no-input pip 2>&1 >/dev/null; then
+        echo "Done."
+    else
+        echo "Failed."
+    fi
+    
+    # Install dependencies
+    echo "Installing Python dependencies..."
+    if $pip install --upgrade --no-input -r "$DEPENDENCIES_URL" 2>&1 >/dev/null; then
+        echo "Python packages installed."
+    else
+        fmt_error "Failed to install python dependencies. Please install them manually."
+    fi
+
+    if [ $? -ne 0 ]; then
+        fmt_error "Failed to install python dependencies. Please install them manually."
+        exit 1
+    else
+        echo "Python dependencies installed successfully."
     fi
 
     echo
@@ -714,7 +776,6 @@ install_oh_my_zsh() {
 
     setup_dot_rc
 
-    echo
     printf '%s\n' "Copying zsh rc config from templates..."
     # Install oh-my-zsh configs
     cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
@@ -790,6 +851,23 @@ install_oh_my_zsh() {
         echo "zstyle ':omz:update' frequency 13" >>"$HOME/.zshrc"
     elif grep -qE "^# zstyle ':omz:update' frequency" "$HOME/.zshrc"; then
         sed -i "s/^# zstyle ':omz:update' frequency/zstyle ':omz:update' frequency/g" "$HOME/.zshrc"
+    fi
+
+    # Update the users RPROMPT to be blank
+    printf '%s\n' "Setting RPROMPT to be blank..."
+    if ! grep -qE "RPROMPT=" "$HOME/.zshrc"; then
+        echo "RPROMPT=" >>"$HOME/.zshrc"
+    else
+        sed -i "s/^RPROMPT=.*/RPROMPT=/g" "$HOME/.zshrc"
+    fi
+
+    # Update the users prompt to be only be '[%~] $ '
+    printf '%s\n' "Setting minimalistic PROMPT for users shell prompt..."
+    # Check .zshrc for PROMPT but exclude RPRMPT matching
+    if ! grep -qE "\bPROMPT=" "$HOME/.zshrc"; then
+        echo "PROMPT='[%~] \$ '" >>"$HOME/.zshrc"
+    else
+        sed -i "s/^PROMPT=.*/PROMPT='[%~] \$ '/g" "$HOME/.zshrc"
     fi
 
     echo
@@ -1080,7 +1158,8 @@ EOF
     fi
 
     setup_colors
-    install_dependencies
+    install_linux_dependencies
+    install_python_dependencies
     change_users_shell
     install_oh_my_zsh
     install_arsenal
@@ -1093,7 +1172,10 @@ EOF
         exit
     fi
 
-    exec bash -l
+    # Bounce into a fresh shell for the users prefered default
+    # shell
+    exec $(running_shell) -l
+    #exec bash -l
 }
 
 main "$@"
