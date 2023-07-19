@@ -1,3 +1,4 @@
+epel-release
 util-linux
 # util-linux-user
 zsh
@@ -10,6 +11,7 @@ python3
 python3-pip
 zip
 unzip
-dnsutils
-bind-utils
+dnsutils # dig
+bind-utils # dig - centos
 whois
+geoip # geoiplookup
