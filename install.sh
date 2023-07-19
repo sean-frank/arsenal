@@ -1,11 +1,11 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #
 # This script should be run via curl:
-#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)"
+#   bash <(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)
 # or via wget:
-#   sh -c "$(wget -qO- https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)"
+#   bash <(wget -qO- https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)
 # or via fetch:
-#   sh -c "$(fetch -o - https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)"
+#   bash <(fetch -o - https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)
 #
 # As an alternative, you can first download the install script and run it afterwards:
 #   wget https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh
@@ -34,9 +34,9 @@
 #   --unattended: sets both CHSH and RUNBASH to 'no'
 #   --keep-bashrc: sets KEEP_BASHRC to 'yes'
 # For example:
-#   sh install.sh --unattended
+#   bash install.sh --unattended
 # or:
-#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh)" "" --unattended
+#   bash <(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/tools/install.sh) --unattended
 #
 set -e
 
@@ -48,6 +48,20 @@ FORCE=${FORCE:-no}
 SKIP_OMZ=${SKIP_OMZ:-no}
 NO_DEPS=${NO_DEPS:-no}
 BRANCH=${BRANCH:-master}
+
+help() {
+    cat <<EOF
+Usage: $(basename "$0") [arguments]
+Arguments:
+  --skip-chsh       Skip changing the shell to zsh
+  --unattended      Skip changing the shell and running zsh after install
+  --keep-bashrc     Keep the existing .bashrc file
+  --no-deps         Skip installing dependencies
+  --force           Skip the prompt and install Arsenal
+  --branch          Install a specific branch (default: master)
+  --help            Show this help message
+EOF
+}
 
 # parse command line arguments
 while [ $# -gt 0 ]; do
@@ -71,6 +85,10 @@ while [ $# -gt 0 ]; do
     --branch)
         BRANCH=$2
         shift
+        ;;
+    --help)
+        help
+        exit 0
         ;;
     *)
         echo "Invalid argument: $1"
@@ -967,7 +985,7 @@ fi
 print_header() {
     printf "%s                                    __%s\n" "$RED" "$RESET"
     printf "%s  ____ ______________  ____  ____ _/ /%s\n" "$RED" "$RESET"
-    printf "%s / __ $(/ ___/ ___/ _ \/ __ \/ __)/ / %s\n" "$RED" "$RESET"
+    printf "%s / __  / ___/ ___/ _ \/ __ \/ __/ / / %s\n" "$RED" "$RESET"
     printf "%s/ /_/ / /  (__  )  __/ / / / /_/ / /  %s\n" "$RED" "$RESET"
     printf "%s\__,_/_/  /____/\___/_/ /_/\__,_/_/   %s\n" "$RED" "$RESET"
 }
@@ -980,7 +998,7 @@ print_success() {
     printf '\n'
     printf '%s %s %s\n' \
         "Before you go all ${BOLD}${YELLOW}Hacking the Gibson${RESET} with your new tools," \
-        "we recommend you look over your $(fmt_code "$(fmt_link ".bashrc" "file://$zdot/.bashrc" --text)") " \
+        "we recommend you look over your $(fmt_code "$(fmt_link "$dot_file" "file://$dot_file" --text)") " \
         "file to ensure your options haven't been broken."
     printf '\n'
     printf '%s\n' "• Check out the Arsenal Wiki: $(fmt_link @arsenal https://github.com/xransum/arsenal/wiki)"
