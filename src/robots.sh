@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 # robots.sh - Checks for a website's robots.txt file, parsing and outputting its rules.
 

@@ -1,19 +1,18 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 SOURCE=${BASH_SOURCE[0]}
 
 # resolve $SOURCE until the file is no longer a symlink
 while [ -L "$SOURCE" ]; do
-  SRC_DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
-  SOURCE=$(readlink "$SOURCE")
-  # if $SOURCE was a relative symlink, we need to resolve it
-  # relative to the path where the symlink file was located
-  [[ $SOURCE != /* ]] && SOURCE=$SRC_DIR/$SOURCE
+    SRC_DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
+    SOURCE=$(readlink "$SOURCE")
+    # if $SOURCE was a relative symlink, we need to resolve it
+    # relative to the path where the symlink file was located
+    [[ $SOURCE != /* ]] && SOURCE=$SRC_DIR/$SOURCE
 done
-SRC_DIR=$(cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd)
+SRC_DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
 BIN_DIR="$(dirname "$SRC_DIR")/bin"
-cd "$SRC_DIR"
-
+cd "$SRC_DIR" || exit
 
 import() {
     for v in "$@"; do
@@ -31,12 +30,12 @@ import version.sh
 import utils/commons.sh
 
 print_header() {
-  printf '%s                                    __%s\n' $RED $RESET
-  printf '%s  ____ ______________  ____  ____ _/ /%s\n' $RED $RESET
-  printf '%s / __ `/ ___/ ___/ _ \/ __ \/ __ `/ / %s\n' $RED $RESET
-  printf '%s/ /_/ / /  (__  )  __/ / / / /_/ / /  %s\n' $RED $RESET
-  printf '%s\__,_/_/  /____/\___/_/ /_/\__,_/_/   %s\n' $RED $RESET
-  printf '\n'
+    printf '%s                                    __%s\n' "$RED" "$RESET"
+    printf '%s  ____ ______________  ____  ____ _/ /%s\n' "$RED" "$RESET"
+    printf '%s / __ `/ ___/ ___/ _ \/ __ \/ __ `/ / %s\n' "$RED" "$RESET"
+    printf '%s/ /_/ / /  (__  )  __/ / / / /_/ / /  %s\n' "$RED" "$RESET"
+    printf '%s\__,_/_/  /____/\___/_/ /_/\__,_/_/   %s\n' "$RED" "$RESET"
+    printf '\n'
 }
 
 setup_colors

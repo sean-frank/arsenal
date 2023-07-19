@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 # security.sh - Check a website for its security.txt file, in case it's RFC 9116 compliant.
 

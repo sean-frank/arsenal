@@ -1,16 +1,17 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
+
+SELF="$0"
 
 import() {
+    # get the directory of the current script
+    DIR="$(dirname "$SELF")"
     for path in "$@"; do
-        filepath="$(readlink -f "$path")"
-        echo "$filepath"
+        filepath="$(readlink -f "$DIR/$path")"
 
-        if [[ "$filepath" != *"/src/"* ]]; then
-            filepath="$(readlink -f "src/$path")"
-        fi
-
+        # source the file, if it exists
         if [ -f "$filepath" ]; then
-            source "$filepath"
+            . "$filepath"
+            continue
         else
             echo "File not found: $path"
             exit 1
@@ -46,47 +47,52 @@ Exit status:
 ${__version__}"""
 
 # parse args
-function help {
+help() {
     printf '%s\n' "$__help__"
     exit 0
 }
-function version {
+version() {
     printf '%s\n' "$__version__"
     exit 0
 }
-function description {
+description() {
     printf '%s\n' "$__description__"
     exit 0
 }
-function verbose {
+verbose() {
     if [ "$verbosity" = 'default' ]; then
-        printf '%s\n' "${YELLOW}[${__name__}]: $@${RESET}"
-    fi
-}
-function parse_args {
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -h|--help) help ;;
-            -v|--verbose) verbosity='verbose' ;;
-            --version) version ;;
-            --description) description ;;
-            --) shift; break ;;
-            -*) echo "invalid option: $1" 1>&2; exit 2 ;;
-            *) break ;;
-        esac
-        shift
-    done
-    if [ $# -eq 0 ]; then
-        printf '%s\n' "try '${__name__} --help' for more information"
-        exit 2
+        printf '%s\n' "${YELLOW}[${__name__}]: $*${RESET}"
     fi
 }
 
 # default values
 verbosity='default'
 
-parse_args "$@"
-args=($@)
+while [ $# -gt 0 ]; do
+    case "$1" in
+    -h | --help) help ;;
+    -v | --verbose) verbosity='verbose' ;;
+    --version) version ;;
+    --description) description ;;
+    --)
+        shift
+        break
+        ;;
+    -*)
+        echo "invalid option: $1" 1>&2
+        exit 2
+        ;;
+    *) break ;;
+    esac
+    shift
+done
+if [ $# -eq 0 ]; then
+    printf '%s\n' "try '${__name__} --help' for more information"
+    exit 2
+fi
+
+# set args to an array
+args=("$@")
 
 ret=0 # exit code
 header_filters='^HTTP|(Location|x-amz-apigw-id|CloudFront|x-amz-cf-id|AmazonS3).*:|Could not resolve host|Content-(Length|Type)'
@@ -98,13 +104,13 @@ user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 #   Content-Type: text/html
 #   Content-Length: 178
 #   Location: http://www.le.com/
-# 
+#
 # >> http://www.le.com/
 #   HTTP/1.1 302 Moved Temporarily
 #   Content-Type: text/html
 #   Content-Length: 218
 #   Location: https://www.le.com/
-# 
+#
 # >> http://www.le.com/
 #   HTTP/1.1 200 OK
 #   Content-Type: text/html; charset=utf-8
@@ -133,7 +139,7 @@ main() {
             --silent \
             --fail \
             --show-error \
-            --location  \
+            --location \
             --no-progress-meter \
             --connect-timeout 30 \
             --max-time 120 \
@@ -146,10 +152,9 @@ main() {
 
         # title case headers
         result=$(echo "$result" | sed -E 's/(^|:|-)([a-z])/\1\u\2/g')
-        
 
         # determine the redirects by the location header,
-        # then adding 
+        # then adding
         if [ $? -eq 0 ]; then
             echo "${result}"
         else
@@ -219,7 +224,7 @@ for i in "${!args[@]}"; do
     while [ "$prev_url" != "$url" ]; do
         unset exit_code results result next_url
 
-        # clean the url 
+        # clean the url
         url="$(defang "$url")"
         verbose "checking url: $url"
 
@@ -243,7 +248,7 @@ for i in "${!args[@]}"; do
             --dump-header - \
             --no-keepalive -o /dev/null \
             "${url}")"
-        
+
         exit_code=$?
         # when exit code is not 0, handle the error
         if [ $exit_code -ne 0 ]; then
@@ -269,7 +274,7 @@ for i in "${!args[@]}"; do
 
         # we need to handle our redirects here
         unset next_url
-        
+
         # extract the next url from the "Location:" header
         next_url=$(echo "$all_headers" | grep -E '^Location: ' | awk '{print $2}')
 
@@ -319,12 +324,12 @@ for i in "${!args[@]}"; do
         # decrement max redirects
         max_redirects=$((max_redirects - 1))
     done
-    
+
     # print spacing between urls
     if [[ "$i" -lt "$((${#args[@]} - 1))" ]]; then
         printf "\n"
     fi
-    
+
 done
 
 exit 0
