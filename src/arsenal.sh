@@ -4,6 +4,7 @@
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SELF_DIR="$(dirname "$SELF")"
+BIN_DIR="$(dirname "$SELF_DIR")/bin"
 
 import() {
     # get the directory of the current script
@@ -49,7 +50,9 @@ printf '\n'
 printf '%s\n' "Scripts currently available:"
 # all scripts should have symlinks within the $DIR
 
-for f in $(find "$BIN_DIR" -type l); do
+# find all symlinks in the bin directory, sort them by
+# name, and print them out
+find "$BIN_DIR" -type l -executable -print0 | sort -z | while read -r -d $'\0' f; do
     script_name=$(basename "$f")
     printf ' - %s\n' "${YELLOW}${script_name}${RESET}"
 done
