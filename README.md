@@ -11,6 +11,17 @@ A set of scripts and tools to be use for investigating abuse on the cloud.
 ```bash
 bash <(curl -skL https://raw.githubusercontent.com/xransum/arsenal/master/install.sh)
 ```
+Flags:
+- `--no-deps`: skip system dependency installs
+- `--no-py`: skip python package installs
+- `--force`: force install, no confirmations
+
+## Installation
+
+```bash
+bash <(curl -skL https://raw.githubusercontent.com/xransum/arsenal/master/uninstall.sh)
+```
+- `--force`: force uninstall, no confirmations
 
 ## Usage
 
