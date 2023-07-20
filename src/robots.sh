@@ -1,4 +1,29 @@
 #!/usr/bin/env bash
+# ./src/robots.sh
+# Description: checks for a website's robots.txt file.
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(dirname "$SELF")"
+
+import() {
+    # get the directory of the current script
+    for path in "$@"; do
+        filepath="$(readlink -f "$SELF_DIR/$path")"
+
+        # source the file, if it exists
+        if [ -f "$filepath" ]; then
+            . "$filepath"
+            continue
+        else
+            echo "File not found: $path"
+            exit 1
+        fi
+    done
+}
+
+# dependencies
+import version.sh
+import utils/commons.sh
 
 # robots.sh - Checks for a website's robots.txt file, parsing and outputting its rules.
 

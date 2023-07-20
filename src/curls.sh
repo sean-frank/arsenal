@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-SELF="$0"
+# ./src/curls.sh
+# Description: check content status for a url, safely.
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(dirname "$SELF")"
 
 import() {
     # get the directory of the current script
-    DIR="$(dirname "$SELF")"
     for path in "$@"; do
-        filepath="$(readlink -f "$DIR/$path")"
+        filepath="$(readlink -f "$SELF_DIR/$path")"
 
         # source the file, if it exists
         if [ -f "$filepath" ]; then

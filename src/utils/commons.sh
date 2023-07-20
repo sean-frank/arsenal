@@ -1,34 +1,4 @@
-command_exists() {
-    command -v "$@" >/dev/null 2>&1
-}
-
-user_can_sudo() {
-    # Check if sudo is installed
-    command_exists sudo || return 1
-    # Termux can't run sudo, so we can detect it and exit the function early.
-    case "$PREFIX" in
-    *com.termux*) return 1 ;;
-    esac
-    # The following command has 3 parts:
-    #
-    # 1. Run `sudo` with `-v`. Does the following:
-    #    • with privilege: asks for a password immediately.
-    #    • without privilege: exits with error code 1 and prints the message:
-    #      Sorry, user <username> may not run sudo on <hostname>
-    #
-    # 2. Pass `-n` to `sudo` to tell it to not ask for a password. If the
-    #    password is not required, the command will finish with exit code 0.
-    #    If one is required, sudo will exit with error code 1 and print the
-    #    message:
-    #    sudo: a password is required
-    #
-    # 3. Check for the words "may not run sudo" in the output to really tell
-    #    whether the user has privileges or not. For that we have to make sure
-    #    to run `sudo` in the default locale (with `LANG=`) so that the message
-    #    stays consistent regardless of the user's locale.
-    #
-    ! LANG= sudo -n -v 2>&1 | grep -q "may not run sudo"
-}
+# Common functions and variables used by other scripts
 
 # The [ -t 1 ] check only works when the function is not called from
 # a subshell (like in `$(...)` or `(...)`, so this hack redefines the
@@ -125,7 +95,7 @@ supports_truecolor() {
     return 1
 }
 
-fmt_link() {
+link() {
     # $1: text, $2: url, $3: fallback mode
     if supports_hyperlinks; then
         printf '\033]8;;%s\033\\%s\033]8;;\033\\\n' "$2" "$1"
@@ -134,20 +104,20 @@ fmt_link() {
 
     case "$3" in
     --text) printf '%s\n' "$1" ;;
-    --url | *) fmt_underline "$2" ;;
+    --url | *) underline "$2" ;;
     esac
 }
 
-fmt_underline() {
+underline() {
     is_tty && printf '\033[4m%s\033[24m\n' "$*" || printf '%s\n' "$*"
 }
 
 # shellcheck disable=SC2016 # backtick in single-quote
-fmt_code() {
+code() {
     is_tty && printf '`\033[2m%s\033[22m`\n' "$*" || printf '`%s`\n' "$*"
 }
 
-fmt_error() {
+error() {
     printf '%sError: %s%s\n' "${BOLD}${RED}" "$*" "$RESET" >&2
 }
 
@@ -192,6 +162,70 @@ setup_colors() {
     BLUE=$(printf '\033[34m')
     BOLD=$(printf '\033[1m')
     RESET=$(printf '\033[0m')
+}
+
+# Initialize term colorization
+setup_colors
+
+# Check command exists easily
+command_exists() {
+    command -v "$@" >/dev/null 2>&1
+}
+
+# A function for universally setting RUNNING_USER to the user
+# even if running with sudo or sudo su $SUDO_USER is not set
+# in sudo su. This is a hack to work around for any Linux
+# operating systems
+running_user() {
+    if command_exists logname; then
+        logname
+    elif [ -n "${SUDO_USER:-}" ]; then
+        echo "$SUDO_USER"
+    elif [ -n "${USER:-}" ]; then
+        echo "$USER"
+    elif [ -n "${USERNAME:-}" ]; then
+        echo "$USERNAME"
+    else
+        whoami
+    fi
+}
+
+# Check whether running user can escalate using sudo
+can_root() {
+    # Check if sudo is installed
+    command_exists sudo || return 1
+    # Termux can't run sudo, so we can detect it and exit the function early.
+    case "$PREFIX" in
+    *com.termux*) return 1 ;;
+    esac
+    # The following command has 3 parts:
+    #
+    # 1. Run `sudo` with `-v`. Does the following:
+    #    • with privilege: asks for a password immediately.
+    #    • without privilege: exits with error code 1 and prints the message:
+    #      Sorry, user <username> may not run sudo on <hostname>
+    #
+    # 2. Pass `-n` to `sudo` to tell it to not ask for a password. If the
+    #    password is not required, the command will finish with exit code 0.
+    #    If one is required, sudo will exit with error code 1 and print the
+    #    message:
+    #    sudo: a password is required
+    #
+    # 3. Check for the words "may not run sudo" in the output to really tell
+    #    whether the user has privileges or not. For that we have to make sure
+    #    to run `sudo` in the default locale (with `LANG=`) so that the message
+    #    stays consistent regardless of the user's locale.
+    #
+    ! LANG=$(sudo -n -v 2>&1 | grep -q "may not run sudo")
+}
+
+# Check if user is currently running as root
+am_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 defang() {

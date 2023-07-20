@@ -1,4 +1,29 @@
 #!/usr/bin/env bash
+# ./src/ipcheck.sh
+# Description: checks ip address information from ipinfo.io
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(dirname "$SELF")"
+
+import() {
+    # get the directory of the current script
+    for path in "$@"; do
+        filepath="$(readlink -f "$SELF_DIR/$path")"
+
+        # source the file, if it exists
+        if [ -f "$filepath" ]; then
+            . "$filepath"
+            continue
+        else
+            echo "File not found: $path"
+            exit 1
+        fi
+    done
+}
+
+# dependencies
+import version.sh
+import utils/commons.sh
 
 # prints script help menu
 function help {
@@ -19,16 +44,16 @@ if [ -z "$1" ] || [[ "$@" == *"-h"* ]]; then
 fi
 
 function valid_ip() {
-    local  ip=$1
-    local  stat=1
+    local ip=$1
+    local stat=1
 
     if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
         OIFS=$IFS
         IFS='.'
         ip=($ip)
         IFS=$OIFS
-        [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 \
-            && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
+        [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 &&
+            ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
         stat=$?
     fi
     return $stat
@@ -36,7 +61,7 @@ function valid_ip() {
 
 for ipaddr in "$@"; do
     #echo "Checking $ipaddr"
-    if valid_ip $ipaddr; then
+    if valid_ip "$ipaddr"; then
         res=$(curl -skL "https://ipinfo.io/$ipaddr/json")
         echo "$res"
         #echo "IP Address: $(jq '.ip' <<<"$res")"

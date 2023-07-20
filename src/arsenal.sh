@@ -1,25 +1,21 @@
 #!/usr/bin/env bash
+# ./src/arsenal.sh
+# Description: prints out the arsenal scripts available
 
-SOURCE=${BASH_SOURCE[0]}
-
-# resolve $SOURCE until the file is no longer a symlink
-while [ -L "$SOURCE" ]; do
-    SRC_DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
-    SOURCE=$(readlink "$SOURCE")
-    # if $SOURCE was a relative symlink, we need to resolve it
-    # relative to the path where the symlink file was located
-    [[ $SOURCE != /* ]] && SOURCE=$SRC_DIR/$SOURCE
-done
-SRC_DIR=$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)
-BIN_DIR="$(dirname "$SRC_DIR")/bin"
-cd "$SRC_DIR" || exit
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(dirname "$SELF")"
 
 import() {
-    for v in "$@"; do
-        if [ -f "$v" ]; then
-            source "$(readlink -f "$v")"
+    # get the directory of the current script
+    for path in "$@"; do
+        filepath="$(readlink -f "$SELF_DIR/$path")"
+
+        # source the file, if it exists
+        if [ -f "$filepath" ]; then
+            . "$filepath"
+            continue
         else
-            echo "File not found: $v"
+            echo "File not found: $path"
             exit 1
         fi
     done

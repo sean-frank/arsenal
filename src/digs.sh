@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
-# digs.sh
+# ./src/digs.sh
 # Description: domain name system lookup
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(dirname "$SELF")"
+
+import() {
+    # get the directory of the current script
+    for path in "$@"; do
+        filepath="$(readlink -f "$SELF_DIR/$path")"
+
+        # source the file, if it exists
+        if [ -f "$filepath" ]; then
+            . "$filepath"
+            continue
+        else
+            echo "File not found: $path"
+            exit 1
+        fi
+    done
+}
+
+# dependencies
+import version.sh
+import utils/commons.sh
 
 # parse args
 function help {
