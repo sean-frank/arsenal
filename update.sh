@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+echo "This script has been temporarily disabled. No alternative is available at this time. Please check back later."
+echo ""
+exit 1
+
 ret=0 # exit code
 
 # Protect against running with shells other than zsh
@@ -331,4 +335,4 @@ case "$resetAutoStash" in
 esac
 
 # Exit with `1` if the update failed
-exit $ret
+exit "$ret"
