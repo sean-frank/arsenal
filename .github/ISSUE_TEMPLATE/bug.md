@@ -15,9 +15,12 @@ assignees: ''
 
 By submitting an issue or commenting to an already existing issue, means you
 have Acknowledged the above blurb.
+-->
 
+<!--
 Note: Please search to see if an issue already exists for the bug you're running into.
 -->
+
 
 ### Current Behavior:
 <!-- A concise description of what you're experiencing. -->
