@@ -40,146 +40,6 @@
 #
 set -e
 
-# Global arguments
-CHSH=${CHSH:-yes}
-RUNBASH=${RUNBASH:-yes}
-KEEP_BASHRC=${KEEP_BASHRC:-no}
-FORCE=${FORCE:-no}
-SKIP_OMZ=${SKIP_OMZ:-no}
-NO_DEPS=${NO_DEPS:-no}
-BRANCH=${BRANCH:-master}
-
-help() {
-    cat <<EOF
-Usage: $(basename "$0") [arguments]
-Arguments:
-  --skip-chsh       Skip changing the shell to zsh
-  --unattended      Skip changing the shell and running zsh after install
-  --keep-bashrc     Keep the existing .bashrc file
-  --no-deps         Skip installing dependencies
-  --force           Skip the prompt and install Arsenal
-  --branch          Install a specific branch (default: master)
-  --help            Show this help message
-EOF
-}
-
-# parse command line arguments
-while [ $# -gt 0 ]; do
-    case $1 in
-    --skip-chsh)
-        CHSH=no
-        ;;
-    --unattended)
-        CHSH=no
-        RUNBASH=no
-        ;;
-    --keep-bashrc)
-        KEEP_BASHRC=yes
-        ;;
-    --no-deps)
-        NO_DEPS=yes
-        ;;
-    --force)
-        FORCE=yes
-        ;;
-    --branch)
-        BRANCH=$2
-        shift
-        ;;
-    --help)
-        help
-        exit 0
-        ;;
-    *)
-        echo "Invalid argument: $1"
-        exit 1
-        ;;
-    esac
-    shift
-done
-
-command_exists() {
-    command -v "$@" >/dev/null 2>&1
-}
-
-# A function for universally setting RUNNING_USER to the user
-# even if running with sudo or sudo su $SUDO_USER is not set
-# in sudo su. This is a hack to work around for any Linux
-# operating systems
-running_user() {
-    if command_exists logname; then
-        logname
-    elif [ -n "${SUDO_USER:-}" ]; then
-        echo "$SUDO_USER"
-    elif [ -n "${USER:-}" ]; then
-        echo "$USER"
-    elif [ -n "${USERNAME:-}" ]; then
-        echo "$USERNAME"
-    else
-        whoami
-    fi
-}
-
-# Make sure important variables exist if not already defined
-#
-# $USER is defined by login(1) which is not always executed (e.g. containers)
-# POSIX: https://pubs.opengroup.org/onlinepubs/009695299/utilities/id.html
-# USER=${USER:-$(id -u -n)}
-USER="$(running_user)"
-# $HOME is defined at the time of login, but it could be unset. If it is unset,
-# a tilde by itself (~) will not be expanded to the current user's home directory.
-# POSIX: https://pubs.opengroup.org/onlinepubs/009696899/basedefs/xbd_chap08.html#tag_08_03
-HOME="${HOME:-$(getent passwd "$USER" 2>/dev/null | cut -d: -f6)}"
-# macOS does not have getent, but this works even if $HOME is unset
-HOME="${HOME:-$(eval echo ~"$USER")}"
-
-# Track if $ARSENAL_BASH was provided
-custom_bash=${ARSENAL_BASH:+yes}
-
-# Use $ARSENAL_DOT to keep track of where the directory is for zsh dotfiles
-# To check if $ARSENAL_DOTDIR was provided, explicitly check for $ARSENAL_DOTDIR
-ARSENAL_DOT="${ARSENAL_DOTDIR:-$HOME}"
-
-# Default value for $ARSENAL_BASH
-# a) if $ARSENAL_DOTDIR is supplied and not $HOME: $ARSENAL_DOTDIR/arsenal
-# b) otherwise, $HOME/.arsenal
-[ "$ARSENAL_DOTDIR" = "$HOME" ] || ARSENAL_BASH="${ARSENAL_BASH:-${ARSENAL_DOTDIR:+$ARSENAL_DOTDIR/arsenal}}"
-ARSENAL_BASH="${ARSENAL_BASH:-$HOME/.arsenal}"
-
-# Default settings
-REPO=${REPO:-xransum/arsenal}
-REMOTE=${REMOTE:-https://github.com/${REPO}.git}
-BRANCH=${BRANCH:-master}
-RAW_REMOTE=${RAW_REMOTE:-https://raw.githubusercontent.com/${REPO}/${BRANCH}}
-
-user_can_sudo() {
-    # Check if sudo is installed
-    command_exists sudo || return 1
-    # Termux can't run sudo, so we can detect it and exit the function early.
-    case "$PREFIX" in
-    *com.termux*) return 1 ;;
-    esac
-    # The following command has 3 parts:
-    #
-    # 1. Run `sudo` with `-v`. Does the following:
-    #    • with privilege: asks for a password immediately.
-    #    • without privilege: exits with error code 1 and prints the message:
-    #      Sorry, user <username> may not run sudo on <hostname>
-    #
-    # 2. Pass `-n` to `sudo` to tell it to not ask for a password. If the
-    #    password is not required, the command will finish with exit code 0.
-    #    If one is required, sudo will exit with error code 1 and print the
-    #    message:
-    #    sudo: a password is required
-    #
-    # 3. Check for the words "may not run sudo" in the output to really tell
-    #    whether the user has privileges or not. For that we have to make sure
-    #    to run `sudo` in the default locale (with `LANG=`) so that the message
-    #    stays consistent regardless of the user's locale.
-    #
-    ! LANG=$(sudo -n -v 2>&1 | grep -q "may not run sudo")
-}
-
 # The [ -t 1 ] check only works when the function is not called from
 # a subshell (like in `$(...)` or `(...)`, so this hack redefines the
 # function at the top level to always return false when stdout is not
@@ -275,7 +135,7 @@ supports_truecolor() {
     return 1
 }
 
-fmt_link() {
+link() {
     # $1: text, $2: url, $3: fallback mode
     if supports_hyperlinks; then
         printf '\033]8;;%s\033\\%s\033]8;;\033\\\n' "$2" "$1"
@@ -284,20 +144,20 @@ fmt_link() {
 
     case "$3" in
     --text) printf '%s\n' "$1" ;;
-    --url | *) fmt_underline "$2" ;;
+    --url | *) underline "$2" ;;
     esac
 }
 
-fmt_underline() {
+underline() {
     is_tty && printf '\033[4m%s\033[24m\n' "$*" || printf '%s\n' "$*"
 }
 
 # shellcheck disable=SC2016 # backtick in single-quote
-fmt_code() {
+code() {
     is_tty && printf '`\033[2m%s\033[22m`\n' "$*" || printf '`%s`\n' "$*"
 }
 
-fmt_error() {
+error() {
     printf '%sError: %s%s\n' "${BOLD}${RED}" "$*" "$RESET" >&2
 }
 
@@ -344,14 +204,81 @@ setup_colors() {
     RESET=$(printf '\033[0m')
 }
 
-# A function for checking if the user can run sudo or not
+# Initialize term colorization
+setup_colors
+
+help() {
+    cat <<EOF
+Usage: $(basename "$0") [arguments]
+Arguments:
+  --skip-chsh       Skip changing the shell to zsh
+  --unattended      Skip changing the shell and running zsh after install
+  --keep-bashrc     Keep the existing .bashrc file
+  --no-deps         Skip installing dependencies
+  --force           Skip the prompt and install Arsenal
+  --branch          Install a specific branch (default: master)
+  --help            Show this help message
+EOF
+}
+
+print_header() {
+    printf "%s                                    __%s\n" "$RED" "$RESET"
+    printf "%s  ____ ______________  ____  ____ _/ /%s\n" "$RED" "$RESET"
+    printf "%s / __  / ___/ ___/ _ \/ __ \/ __/ / / %s\n" "$RED" "$RESET"
+    printf "%s/ /_/ / /  (__  )  __/ / / / /_/ / /  %s\n" "$RED" "$RESET"
+    printf "%s\__,_/_/  /____/\___/_/ /_/\__,_/_/   %s\n" "$RED" "$RESET"
+}
+
+# shellcheck disable=SC2183  # printf string has more %s than arguments ($RAINBOW expands to multiple arguments)
+print_success() {
+    print_header
+    printf '%s      ...is now installed!            %s\n' "$GREEN" "$RESET"
+    printf '\n'
+    printf '\n'
+    printf '%s %s %s\n' \
+        "Before you go all ${BOLD}${YELLOW}Hacking the Gibson${RESET} with your new tools," \
+        "we recommend you look over your $(code "$(link "$dot_file" "file://$dot_file" --text)") " \
+        "file to ensure your options haven't been broken."
+    printf '\n'
+    printf '%s\n' "• Check out the Arsenal Wiki: $(link @arsenal https://github.com/xransum/arsenal/wiki)"
+    printf '\n'
+    printf '%s\n' "Get started by using the command:"
+    printf '%s\n' "  ${BOLD}$(code arsenal --help)${RESET}"
+    printf '\n'
+    printf '%s %s\n' "Happy scripting!" "${BOLD}${GREEN}Hack the Plant${RESET}!"
+    printf '%s\n' "$RESET"
+}
+
+# Check command exists easily
+command_exists() {
+    command -v "$@" >/dev/null 2>&1
+}
+
+# A function for universally setting RUNNING_USER to the user
+# even if running with sudo or sudo su $SUDO_USER is not set
+# in sudo su. This is a hack to work around for any Linux
+# operating systems
+running_user() {
+    if command_exists logname; then
+        logname
+    elif [ -n "${SUDO_USER:-}" ]; then
+        echo "$SUDO_USER"
+    elif [ -n "${USER:-}" ]; then
+        echo "$USER"
+    elif [ -n "${USERNAME:-}" ]; then
+        echo "$USERNAME"
+    else
+        whoami
+    fi
+}
+
+# Check whether running user can escalate using sudo
 can_root() {
     # Check if sudo is installed
     command_exists sudo || return 1
     # Termux can't run sudo, so we can detect it and exit the function early.
-    case "$PREFIX" in *com.termux*)
-        return 1
-        ;;
+    case "$PREFIX" in
+    *com.termux*) return 1 ;;
     esac
     # The following command has 3 parts:
     #
@@ -374,7 +301,7 @@ can_root() {
     ! LANG=$(sudo -n -v 2>&1 | grep -q "may not run sudo")
 }
 
-# A function for checking if the user is root or not
+# Check if user is currently running as root
 am_root() {
     if [ "$(id -u)" -eq 0 ]; then
         return 0
@@ -383,30 +310,8 @@ am_root() {
     fi
 }
 
-# A function for universally setting RUNNING_USER to the user
-# even if running with sudo or sudo su $SUDO_USER is not set
-# in sudo su. This is a hack to work around for any Linux
-# operating systems
-running_user() {
-    if command_exists logname; then
-        echo "$(logname)"
-    elif [ -n "${SUDO_USER:-}" ]; then
-        echo "$SUDO_USER"
-    elif [ -n "${USER:-}" ]; then
-        echo "$USER"
-    elif [ -n "${USERNAME:-}" ]; then
-        echo "$USERNAME"
-    else
-        echo "$(whoami)"
-    fi
-}
-
-users_default_shell() {
-    basename $(awk -F: -v user="$USER" '$1 == user {print $NF}' /etc/passwd)
-}
-
 # Grab running users default shell
-running_shell() {
+default_shell() {
     if command_exists getent; then
         getent passwd "$(running_user)" | cut -d: -f7
     else
@@ -414,200 +319,33 @@ running_shell() {
     fi
 }
 
-install_linux_dependencies() {
-    # Skip setup if the user wants or stdin is closed (not running interactively).
-    if [ "$NO_DEPS" = yes ]; then
-        printf '%s\n' "Skipping linux dependencies installation."
-        return
-    fi
-
-    printf '%s\n' "Installing dependencies... This may take a few minutes."
-    DEPENDENCIES_URL="$RAW_REMOTE/deps/linux.txt"
-    DEPENDENCIES=$(curl -fsSL "$DEPENDENCIES_URL" | sed 's/#.*//' | tr '\n' ' ' | tr -s ' ')
-
-    if [ -z "$DEPENDENCIES" ]; then
-        fmt_error "Failed to fetch dependencies list from $DEPENDENCIES_URL"
-        exit 1
-    fi
-
-    if ! (command_exists apt-get || command_exists yum); then
-        fmt_error "Sorry, Arsenal only supports Debian and Red Hat-based systems at this time."
-        exit 1
-    fi
-
-    printf '%s\n' "Download package information from all package sources..."
-    # Debian
-    if command_exists apt-get; then
-        if $sudo apt-get update -y 2>&1 >/dev/null; then
-            echo "Package information updated successfully."
-        else
-            echo "Package information update failed."
-        fi
-    # CentOS
-    elif command_exists yum; then
-        if $sudo yum update -y 2>&1 >/dev/null; then
-            echo "Package information updated successfully."
-        else
-            echo "Package information update failed."
-        fi
-
-        if $sudo yum upgrade -y 2>&1 >/dev/null; then
-            echo "Package information upgraded successfully."
-        else
-            echo "Package information upgrade failed."
-        fi
-    else
-        fmt_error "Sorry, Arsenal only supports Debian and Red Hat-based systems at this time."
-        exit 1
-    fi
-
-    printf '%s\n' "Installing packages dependencies..."
-    for dep in $DEPENDENCIES; do
-        echo -n "Installing $dep... "
-
-        # Debian
-        if command_exists apt-get; then
-            if $sudo apt-get install -y "$dep" 2>&1 >/dev/null; then
-                echo "Done."
-            else
-                echo "Failed."
-            fi
-        # CentOS
-        elif command_exists yum; then
-            # For CentOS 7, we need to install git from a different repo,
-            # but only if it's git and git version is 1.x
-            if [ "$dep" = "git" ] && [ "$(cat /etc/os-release | grep -oP '(?<=VERSION_ID=")\d+' | head -n 1)" = "7" ] && [ "$(git --version | grep -oP '(?<=git version )\d+' | head -n 1)" = "1" ]; then
-                # This is entirely a me problem and the fact that I natively use CentOS 7
-                # and git 1.x is the default. I'm not going to bother with CentOS 8
-                $sudo yum remove git -y 2>&1 >/dev/null
-                $sudo rpm -U http://opensource.wandisco.com/centos/7/git/x86_64/wandisco-git-release-7-2.noarch.rpm
-                $sudo yum install git -y 2>&1 >/dev/null
-                echo "Done."
-            else
-                if ! $sudo yum install -y "$dep" 2>&1 | grep -q "Error: Nothing to do" >/dev/null; then
-                    echo "Done."
-                else
-                    echo "Failed."
-                fi
-            fi
-        fi
-    done
-
-    if [ $? -ne 0 ]; then
-        fmt_error "Failed to install linux dependencies. Please install them manually."
-        exit 1
-    fi
-
-    echo
-}
-
-install_python_dependencies() {
-    # Skip setup if the user wants or stdin is closed (not running interactively).
-    if [ "$NO_DEPS" = yes ]; then
-        printf '%s\n' "Skipping python dependencies installation."
-        return
-    fi
-
-    printf '%s\n' "Installing dependencies... This may take a few minutes."
-    DEPENDENCIES_URL="$RAW_REMOTE/deps/requirements.txt"
-    DEPENDENCIES=$(curl -fsSL "$DEPENDENCIES_URL")
-    
-    if [ -z "$DEPENDENCIES" ]; then
-        fmt_error "Failed to fetch dependencies list from $DEPENDENCIES_URL"
-        return
-    fi
-
-    if ! (command_exists python3 || command_exists pip3); then
-        fmt_error "Sorry, Arsenal only supports Python3 at this time. Skipping..."
-        return
-    fi
-    
-    printf '%s\n' "Installing Python package dependencies..."
-
-    # Set pip path to pip3 if it exists, otherwise python3 -m pip
-    pip=
-    if command_exists pip3; then
-        pip="pip3"
-    # Require python3 and pip3 to be installed
-    # TODO: Add verification that python3 has the pip module installed
-    elif command_exists python3; then
-        pip="python3 -m pip"
-    else
-        fmt_error "Sorry, Arsenal requires pip3 or python3 to be installed. Skipping..."
-        return
-    fi
-
-    # Update pip to latest version
-    echo -n "Updating pip... "
-    if $pip install --upgrade --no-input pip 2>&1 >/dev/null; then
-        echo "Done."
-    else
-        echo "Failed."
-    fi
-    
-    # Install dependencies
-    echo "Installing Python dependencies..."
-    if $pip install --upgrade --no-input -r "$DEPENDENCIES_URL" 2>&1 >/dev/null; then
-        echo "Python packages installed."
-    else
-        fmt_error "Failed to install python dependencies. Please install them manually."
-    fi
-
-    if [ $? -ne 0 ]; then
-        fmt_error "Failed to install python dependencies. Please install them manually."
-        exit 1
-    else
-        echo "Python dependencies installed successfully."
-    fi
-
-    echo
-}
-
 # Function for setting a users shell to a specific shell
-change_users_shell() {
+set_default_shell() {
     # Skip setup if the user wants or stdin is closed (not running interactively).
     if [ "$CHSH" = no ]; then
         return
     fi
 
-    # If this user's login shell is already "zsh", do not attempt to switch.
-    SHELL=$(users_default_shell)
-    if [ "$SHELL" = "zsh" ]; then
+    target_shell="$1"
+    # If this user's login shell is already the target shell, do not attempt to switch.
+    if [ "$(default_shell)" = "$target_shell" ]; then
         return
     fi
 
     # If this platform doesn't provide a "chsh" command, bail out.
     if ! command_exists chsh; then
         printf '%s\n%s%s%s\n' "I can't change your shell automatically because this system does not have chsh." \
-            "$FMT_BLUE" "Please manually change your default shell to zsh" "$FMT_RESET"
-
+            "$BLUE" "Please manually change your default shell to $target_shell" "$RESET"
         return
     fi
 
-    echo "${FMT_BLUE}Time to change your default shell to zsh:${FMT_RESET}"
-
-    # Prompt for user choice on changing the default login shell
-    # printf '%sDo you want to change your default shell to zsh? [Y/n]%s ' \
-    #     "$FMT_YELLOW" "$FMT_RESET"
-
-    # read -r opt
-    # case $opt in
-    # y* | Y* | "") ;;
-    # n* | N*)
-    #     echo "Shell change skipped."
-    #     return
-    #     ;;
-    # *)
-    #     echo "Invalid choice. Shell change skipped."
-    #     return
-    #     ;;
-    # esac
+    echo "${BLUE}Time to change your default shell to $target_shell:${RESET}"
 
     # Check if we're running on Termux
     case "$PREFIX" in
     *com.termux*)
         termux=true
-        zsh=zsh
+        shell_path="$target_shell"
         ;;
     *) termux=false ;;
     esac
@@ -619,55 +357,94 @@ change_users_shell() {
         elif [ -f /usr/share/defaults/etc/shells ]; then # Solus OS
             shells_file=/usr/share/defaults/etc/shells
         else
-            fmt_error "could not find /etc/shells file. Change your default shell manually."
+            error "could not find /etc/shells file. Change your default shell manually."
             return
         fi
 
-        # Get the path to the right zsh binary
+        # Get the path to the right target shell binary
         # 1. Use the most preceding one based on $PATH, then check that it's in the shells file
-        # 2. If that fails, get a zsh path from the shells file, then check it actually exists
-        if ! zsh=$(command -v zsh) || ! grep -qx "$zsh" "$shells_file"; then
-            if ! zsh=$(grep '^/.*/zsh$' "$shells_file" | tail -n 1) || [ ! -f "$zsh" ]; then
-                fmt_error "no zsh binary found or not present in '$shells_file'"
-                fmt_error "change your default shell manually."
+        # 2. If that fails, get a target shell path from the shells file, then check it actually exists
+        if ! shell_path=$(command -v "$target_shell") || ! grep -qx "$shell_path" "$shells_file"; then
+            if ! shell_path=$(grep "^/.*/$target_shell$" "$shells_file" | tail -n 1) || [ ! -f "$shell_path" ]; then
+                error "no $target_shell binary found or not present in '$shells_file'"
+                error "change your default shell manually."
                 return
             fi
         fi
     fi
 
-    # We're going to change the default shell, so back up the current one
-    if [ -n "$SHELL" ]; then
-        echo "$SHELL" >"$ARSENAL_DOT/.shell.pre-arsenal"
-    else
-        grep "^$USER:" /etc/passwd | awk -F: '{print $7}' >"$ARSENAL_DOT/.shell.pre-arsenal"
-    fi
+    echo "${BLUE}Checking if your shell is already $target_shell...${RESET}"
 
-    echo "Changing your shell to $zsh..."
-
-    # Check if user has sudo privileges to run `chsh` with or without `sudo`
-    #
-    # This allows the call to succeed without password on systems where the
-    # user does not have a password but does have sudo privileges, like in
-    # Google Cloud Shell.
-    #
-    # On systems that don't have a user with passwordless sudo, the user will
-    # be prompted for the password either way, so this shouldn't cause any issues.
-    #
-    if user_can_sudo; then
-        sudo -k chsh -s "$zsh" "$USER" # -k forces the password prompt
+    # check if the shell is already set or default is already set
+    if [ "$(default_shell)" != "$shell_path" ]; then
+        echo "${YELLOW}Shell not set to '$target_shell'.${RESET}"
+        # Check if the current user is root or the target user, so we don't need sudo
+        if [ "$(id -u)" -eq 0 ]; then
+            chsh -s "$shell_path" "$USER" # run chsh normally
+        else
+            # Check if user has sudo privileges to run `chsh` with or without `sudo`
+            #
+            # This allows the call to succeed without a password on systems where the
+            # user does not have a password but does have sudo privileges, like in
+            # Google Cloud Shell.
+            #
+            # On systems that don't have a user with passwordless sudo, the user will
+            # be prompted for the password either way, so this shouldn't cause any issues.
+            #
+            if can_root; then
+                sudo -k chsh -s "$shell_path" "$USER" # -k forces the password prompt
+            else
+                error "you don't have permission to change the shell. Change your default shell manually."
+                return 1
+            fi
+        fi
     else
-        chsh -s "$zsh" "$USER" # run chsh normally
+        echo "${GREEN}Shell already set to '$target_shell'.${RESET}"
     fi
 
     # Check if the shell change was successful
     if [ $? -ne 0 ]; then
-        fmt_error "chsh command unsuccessful. Change your default shell manually."
+        error "chsh command unsuccessful. Change your default shell manually."
     else
-        export SHELL="$zsh"
-        echo "${FMT_GREEN}Shell successfully changed to '$zsh'.${FMT_RESET}"
+        export SHELL="$shell_path"
+        echo "${GREEN}Shell successfully changed to '$target_shell'.${RESET}"
     fi
 
     echo
+}
+
+set_default_zsh() {
+    # Skip setup if the user wants or stdin is closed (not running interactively).
+    if [ "$CHSH" = no ]; then
+        return
+    fi
+
+    current_default="$(default_shell)"
+    zsh_binary="$(command -v zsh)"
+
+    # We're going to change the default shell, so back up the current one
+    if [ "$(default_shell)" == "$zsh_binary" ]; then
+        echo "${GREEN}Shell already set to '$zsh_binary'.${RESET}"
+        return
+    fi
+
+    # if file exists, skip backup
+    if [ -f "$ARSENAL_DOT/.shell.pre-arsenal" ]; then
+        echo "${YELLOW}Found ${ARSENAL_DOT}/.shell.pre-arsenal.${RESET} ${GREEN}Keeping...${RESET}"
+    else
+        echo "$current_default" >"$ARSENAL_DOT/.shell.pre-arsenal"
+    fi
+
+    # Set the default shell to zsh
+    set_default_shell "zsh"
+
+    # Check if the shell change was successful
+    if [ $? -ne 0 ]; then
+        error "chsh command unsuccessful. Change your default shell manually."
+    else
+        export SHELL="$zsh_binary"
+        echo "${GREEN}Shell successfully changed to '$zsh_binary'.${RESET}"
+    fi
 }
 
 # Update the users dot file to source Arsenal scripts
@@ -679,8 +456,8 @@ setup_dot_rc() {
 
     # Determine the dot file based on the user's default shell
     case "$SHELL" in
-    bash) dot_file="$ARSENAL_DOT/.bashrc" ;;
-    zsh) dot_file="$ARSENAL_DOT/.zshrc" ;;
+    */bash) dot_file="$ARSENAL_DOT/.bashrc" ;;
+    */zsh) dot_file="$ARSENAL_DOT/.zshrc" ;;
     *) dot_file="" ;;
     esac
 
@@ -740,8 +517,8 @@ backup_dot_file() {
         if [ -e "$backup_dot_file" ]; then
             old_backup_dot_file="${backup_dot_file}-$(date +%Y-%m-%d_%H-%M-%S)"
             if [ -e "$old_backup_dot_file" ]; then
-                fmt_error "$old_backup_dot_file exists. Can't back up ${backup_dot_file}"
-                fmt_error "Re-run the installer again in a few seconds."
+                error "$old_backup_dot_file exists. Can't back up ${backup_dot_file}"
+                error "Re-run the installer again in a few seconds."
                 exit 1
             fi
 
@@ -756,9 +533,305 @@ backup_dot_file() {
     fi
 }
 
+# Global arguments
+CHSH=${CHSH:-yes}
+RUNBASH=${RUNBASH:-yes}
+KEEP_BASHRC=${KEEP_BASHRC:-no}
+FORCE=${FORCE:-no}
+SKIP_OMZ=${SKIP_OMZ:-no}
+NO_DEPS=${NO_DEPS:-no}
+NO_PY_DEPS=${NO_PY_DEPS:-no}
+BRANCH=${BRANCH:-master}
+
+# parse command line arguments
+while [ $# -gt 0 ]; do
+    case $1 in
+    --skip-chsh)
+        CHSH=no
+        ;;
+    --unattended)
+        CHSH=no
+        RUNBASH=no
+        ;;
+    --keep-bashrc)
+        KEEP_BASHRC=yes
+        ;;
+    --no-deps)
+        NO_DEPS=yes
+        ;;
+    --no-py)
+        NO_PY_DEPS=yes
+        ;;
+    --force)
+        FORCE=yes
+        ;;
+    --branch)
+        BRANCH=$2
+        shift
+        ;;
+    --help)
+        help
+        exit 0
+        ;;
+    *)
+        echo "Invalid argument: $1"
+        exit 1
+        ;;
+    esac
+    shift
+done
+
+# Make sure important variables exist if not already defined
+#
+# $USER is defined by login(1) which is not always executed (e.g. containers)
+# POSIX: https://pubs.opengroup.org/onlinepubs/009695299/utilities/id.html
+# USER=${USER:-$(id -u -n)}
+USER="$(running_user)"
+# $HOME is defined at the time of login, but it could be unset. If it is unset,
+# a tilde by itself (~) will not be expanded to the current user's home directory.
+# POSIX: https://pubs.opengroup.org/onlinepubs/009696899/basedefs/xbd_chap08.html#tag_08_03
+HOME="${HOME:-$(getent passwd "$USER" 2>/dev/null | cut -d: -f6)}"
+# macOS does not have getent, but this works even if $HOME is unset
+HOME="${HOME:-$(eval echo ~"$USER")}"
+
+# Track if $ARSENAL_BASH was provided
+CUSTOM_BASH=${ARSENAL_BASH:+yes}
+
+# Use $ARSENAL_DOT to keep track of where the directory is for zsh dotfiles
+# To check if $ARSENAL_DOTDIR was provided, explicitly check for $ARSENAL_DOTDIR
+ARSENAL_DOT="${ARSENAL_DOTDIR:-$HOME}"
+
+# Default value for $ARSENAL_BASH
+# a) if $ARSENAL_DOTDIR is supplied and not $HOME: $ARSENAL_DOTDIR/arsenal
+# b) otherwise, $HOME/.arsenal
+[ "$ARSENAL_DOTDIR" = "$HOME" ] || ARSENAL_BASH="${ARSENAL_BASH:-${ARSENAL_DOTDIR:+$ARSENAL_DOTDIR/arsenal}}"
+ARSENAL_BASH="${ARSENAL_BASH:-$HOME/.arsenal}"
+
+# Arsenal repository variables
+REPO=${REPO:-xransum/arsenal}
+REMOTE=${REMOTE:-https://github.com/${REPO}.git}
+BRANCH=${BRANCH:-master}
+RAW_REMOTE=${RAW_REMOTE:-https://raw.githubusercontent.com/${REPO}/${BRANCH}}
+
+# Toybox repository variables
+TOYBOX_REPO='drampil/toy-box'
+TOYBOX_BRANCH="main"
+TOYBOX_RAW_REMOTE="https://raw.githubusercontent.com/${TOYBOX_REPO}/${TOYBOX_BRANCH}"
+
+cd "$ARSENAL_DOT" || exit 1
+
+# Unified way of setting sudo to a variable
+if am_root; then
+    sudo=""
+elif can_root; then
+    sudo="sudo"
+else
+    sudo=""
+fi
+
+install_linux_dependencies() {
+    # Skip setup if the user wants or stdin is closed (not running interactively).
+    if [ "$NO_DEPS" = yes ]; then
+        printf '%s\n' "Skipping linux dependencies installation."
+        return
+    fi
+
+    printf '%s\n' "${BLUE}Installing dependencies... This may take a few minutes.${RESET}"
+    DEPENDENCIES_URL="$RAW_REMOTE/deps/linux.txt"
+    DEPENDENCIES=$(curl -fsSL "$DEPENDENCIES_URL" | sed 's/#.*//' | tr '\n' ' ' | tr -s ' ')
+
+    if [ -z "$DEPENDENCIES" ]; then
+        error "Failed to fetch dependencies list from $DEPENDENCIES_URL"
+        exit 1
+    fi
+
+    if ! (command_exists apt-get || command_exists yum); then
+        error "Sorry, Arsenal only supports Debian and Red Hat-based systems at this time."
+        exit 1
+    fi
+
+    printf '%s\n' "${BLUE}Download package information from all package sources...${RESET}"
+    # Debian
+    if command_exists apt-get; then
+        if $sudo apt-get update -y 2>&1 >/dev/null | grep -vE 'Unable to locate|no installation candidate'; then
+            echo "Package information updated successfully."
+        else
+            echo "Package information update failed."
+        fi
+    # CentOS
+    elif command_exists yum; then
+        if $sudo yum update -y 2>&1 >/dev/null; then
+            echo "Package information updated successfully."
+        else
+            echo "Package information update failed."
+        fi
+
+        if $sudo yum upgrade -y 2>&1 >/dev/null; then
+            echo "Package information upgraded successfully."
+        else
+            echo "Package information upgrade failed."
+        fi
+    else
+        error "Sorry, Arsenal only supports Debian and Red Hat-based systems at this time."
+        exit 1
+    fi
+
+    printf '%s\n' "${BLUE}Installing packages dependencies...${RESET}"
+    for dep in $DEPENDENCIES; do
+        echo -n "Installing $dep... "
+
+        # Debian
+        if command_exists apt-get; then
+            if $sudo apt-get install -y "$dep" 2>&1 >/dev/null; then
+                echo "Done."
+            else
+                echo "Failed."
+            fi
+        # CentOS
+        elif command_exists yum; then
+            # For CentOS 7, we need to install git from a different repo,
+            # but only if it's git and git version is 1.x
+            if [ "$dep" = "git" ] && [ "$(cat /etc/os-release | grep -oP '(?<=VERSION_ID=")\d+' | head -n 1)" = "7" ] && [ "$(git --version | grep -oP '(?<=git version )\d+' | head -n 1)" = "1" ]; then
+                # This is entirely a me problem and the fact that I natively use CentOS 7
+                # and git 1.x is the default. I'm not going to bother with CentOS 8
+                $sudo yum remove git -y 2>&1 >/dev/null
+                $sudo rpm -U http://opensource.wandisco.com/centos/7/git/x86_64/wandisco-git-release-7-2.noarch.rpm
+                $sudo yum install git -y 2>&1 >/dev/null
+                echo "Done."
+            else
+                if ! $sudo yum install -y "$dep" 2>&1 | grep -q "Error: Nothing to do" >/dev/null; then
+                    echo "Done."
+                else
+                    echo "Failed."
+                fi
+            fi
+        fi
+    done
+
+    if [ $? -ne 0 ]; then
+        error "Failed to install linux dependencies. Please install them manually."
+        exit 1
+    fi
+
+    echo
+}
+
+# Function to check if sudo is required for installing a Python3 package
+check_python3_sudo() {
+    # Check if the user has write access to the Python3 packages directory
+    python_packages_dir=$(python3 -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")
+    if [ -w "$python_packages_dir" ]; then
+        echo "sudo not required. You have write access to $python_packages_dir"
+        return 0
+    fi
+
+    # Check if the Python3 executable is in a system directory (e.g., /usr/bin)
+    python3_path=$(command -v python3)
+    if [ -n "$python3_path" ]; then
+        if [[ "$python3_path" == /usr/* ]]; then
+            echo "sudo may be required. Python3 is installed in a system directory."
+            return 1
+        fi
+    fi
+
+    # If we couldn't determine for sure, provide a general message
+    echo "Unable to determine if sudo is required. It may depend on your system configuration."
+    return 2
+}
+
+# Function to check if pip requires --user flag for installing a package
+check_pip_requires_user() {
+    # Get the user-specific site-packages directory
+    user_site_packages_dir=$(python3 -m site --user-site)
+
+    # Check if the user has write access to the user-specific site-packages directory
+    if [ -w "$user_site_packages_dir" ]; then
+        echo "pip does not require --user flag. You have write access to $user_site_packages_dir"
+        return 0
+    fi
+
+    # If the user does not have write access, pip requires --user flag
+    echo "pip requires --user flag. You don't have write access to $user_site_packages_dir"
+    return 1
+}
+
+install_python_dependencies() {
+    # Skip setup if the user wants or stdin is closed (not running interactively).
+    if [ "$NO_PY_DEPS" = yes ]; then
+        printf '%s\n' "${YELLOW}Skipping python dependencies installation.${RESET}"
+        return
+    fi
+
+    if ! (command_exists python3 || command_exists pip3); then
+        error "Sorry, Arsenal only supports Python3 at this time. Skipping..."
+        return
+    fi
+
+    printf '%s\n' "${BLUE}Installing Python dependencies... This may take a few minutes.${RESET}"
+    DEPENDENCIES_URL="$RAW_REMOTE/deps/requirements.txt"
+    DEPENDENCIES=$(curl -fsSL "$DEPENDENCIES_URL" | sed 's/#.*//' | tr -s ' ' | sed 's/ //g')
+
+    if [ -z "$DEPENDENCIES" ]; then
+        error "Failed to fetch dependencies list from $DEPENDENCIES_URL"
+        return
+    fi
+
+    # Set pip path to pip3 if it exists, otherwise python3 -m pip
+    pip=
+    if command_exists python3; then
+        pip="python3 -m pip"
+    elif command_exists pip3; then
+        pip="pip3"
+    # Require python3 and pip3 to be installed
+    # TODO: Add verification that python3 has the pip module installed
+    else
+        error "Sorry, Arsenal requires pip3 or python3 to be installed. Skipping..."
+        return
+    fi
+
+    # Check if sudo is required for installing Python3 packages
+    if check_python3_sudo; then
+        pip="$sudo $pip"
+    fi
+
+    unset pargs
+    # Check if pip requires --user flag for installing Python3 packages
+    if check_pip_requires_user; then
+        pargs="--user"
+    fi
+
+    # Update pip to latest version
+    echo -n "Upgrading Python pip... "
+    if $pip install --upgrade --no-input $pargs pip 2>&1 >/dev/null; then
+        echo "Done."
+    else
+        echo "Failed. Skipping..."
+    fi
+
+    # Install dependencies
+    printf '%s\n' "${BLUE}Installing Python packages...${RESET}"
+    for package in $DEPENDENCIES; do
+        echo -n "Installing package [$package]... "
+        if $pip install --upgrade --no-input $pargs "$package" 2>&1 >/dev/null; then
+            echo "Done."
+        else
+            echo "Failed. Skipping..."
+        fi
+    done
+
+    if [ $? -ne 0 ]; then
+        error "Failed to install all python packages. This can most likely be ignored."
+        exit 1
+    else
+        echo "Python python packages installed."
+    fi
+
+    echo
+}
+
 install_oh_my_zsh() {
     # Install oh-my-zsh base
-    printf '%s\n' "Installing oh-my-zsh..."
+    printf '%s\n' "${BLUE}Installing oh-my-zsh...${RESET}"
 
     # Check for NO_OMZ flag
     if [ "$SKIP_OMZ" = yes ]; then
@@ -768,15 +841,70 @@ install_oh_my_zsh() {
         rm -rf "$HOME/.oh-my-zsh"
     fi
 
-    if [ -d "$HOME/.oh-my-zsh" ]; then
-        git -C "$HOME/.oh-my-zsh" pull
+    ZSH_DIR="$HOME/.oh-my-zsh"
+    ZSH_REPO=${ZSH_REPO:-ohmyzsh/ohmyzsh}
+    ZSH_REMOTE=${ZSH_REMOTE:-https://github.com/${ZSH_REPO}.git}
+    ZSH_BRANCH=${ZSH_BRANCH:-master}
+
+    # Set current dir to variable
+    CURRENT_DIR=$(pwd)
+
+    if [ -d "$ZSH_DIR" ]; then
+        git -C "$ZSH_DIR" pull
     else
-        git clone https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh"
+        #git clone https://github.com/ohmyzsh/ohmyzsh.git "$ZSH_DIR"
+
+        # Check if "$ARSENAL_BASH" is already cloned
+        if [ ! -d "$ZSH_DIR" ]; then
+            echo "No $ZSH_DIR, initializing local repository..."
+            git init "$ZSH_DIR" &&
+                cd "$ZSH_DIR" &&
+                git config core.eol lf &&
+                git config core.autocrlf false &&
+                git config fsck.zeroPaddedFilemode ignore &&
+                git config fetch.fsck.zeroPaddedFilemode ignore &&
+                git config receive.fsck.zeroPaddedFilemode ignore &&
+                git config arsenal.remote origin &&
+                git config arsenal.branch "$ZSH_BRANCH"
+        fi
+
+        # Check if current dir is $CURRENT_DIR
+        if [ "$CURRENT_DIR" != "$ZSH_DIR" ]; then
+            cd "$ZSH_DIR"
+        fi
+
+        # Check if the "origin" remote already exists
+        if ! git remote | grep -q "origin"; then
+            echo "Configuring remote origin to $ZSH_REMOTE"
+            git remote add origin "$ZSH_REMOTE"
+        fi
+
+        echo "Pulling latest changes from remote"
+        git fetch --depth=1 origin
+
+        if git rev-parse --verify --quiet "origin/$ZSH_BRANCH" >/dev/null; then
+            echo "Checking out to remote branch '$ZSH_BRANCH'"
+            git checkout -b "$ZSH_BRANCH" "origin/$ZSH_BRANCH" || {
+                [ ! -d "$ZSH_DIR" ] || {
+                    echo "Installation failed, clearing all installs"
+                    cd "$CURRENT_DIR"
+                    rm -rf "$ZSH_DIR" 2>/dev/null
+                }
+                error "git clone of arsenal repo failed"
+                exit 1
+            }
+        else
+            error "The branch '$ZSH_BRANCH' does not exist in the remote repository."
+            exit 1
+        fi
     fi
+
+    # Return to current dir
+    cd "$CURRENT_DIR"
 
     setup_dot_rc
 
-    printf '%s\n' "Copying zsh rc config from templates..."
+    printf '%s\n' "${BLUE}Copying zsh rc config from templates...${RESET}"
     # Install oh-my-zsh configs
     cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
 
@@ -806,39 +934,41 @@ install_oh_my_zsh() {
     done
 
     echo
-    echo "Setting configs, please wait..."
-    echo "Setting theme to mh..."
+    echo "${BLUE}Setting configs, please wait...${RESET}"
+
+    echo "${BLUE}Setting theme to mh...${RESET}"
     # Set theme to mh, it's the least obstructive and doesn't require
     # 3rd party fonts to view non-ascii chars.
-    sed -i 's/^ZSH_THEME=".*"/ZSH_THEME="mh"/' "$HOME/.zshrc"
     if ! grep -qE 'ZSH_THEME=".*"' "$HOME/.zshrc"; then
         echo 'ZSH_THEME="mh"' >>"$HOME/.zshrc"
     else
-        sed -i "s/^zstyle ':omz:update' mode disabled/# zstyle ':omz:update' mode disabled/g" "$HOME/.zshrc"
+        sed -i 's/^ZSH_THEME=".*"/ZSH_THEME="mh"/g' "$HOME/.zshrc"
     fi
 
-    printf '%s\n' "Enabling default plugins, to enable more plugins, please edit ~/.zshrc manually."
+    printf '%s\n' "${BLUE}Enabling default plugins, to enable more plugins, please edit ~/.zshrc manually.${RESET}"
     # Set default enabled plugins
+    #PLUGIN_NAMES="git zsh-autosuggestions zsh-completions zsh-autocomplete"
+    PLUGIN_NAMES="git"
     if ! grep -qE "plugins=\(.*\)" "$HOME/.zshrc"; then
-        echo 'plugins=(git zsh-autosuggestions zsh-completions zsh-autocomplete)' >>"$HOME/.zshrc"
+        echo "plugins=($PLUGIN_NAMES)" >>"$HOME/.zshrc"
     else
-        sed -i "s/^plugins=\(.*\)$/plugins=(git zsh-autosuggestions zsh-completions zsh-autocomplete)/g" "$HOME/.zshrc"
+        sed -i "s/^plugins=\(.*\)\$/plugins=($PLUGIN_NAMES)/g" "$HOME/.zshrc"
     fi
 
     # Enforce updates
-    printf '%s\n' "Enforcing updates..."
+    printf '%s\n' "${BLUE}Enforcing updates...${RESET}"
     if grep -qE "^zstyle ':omz:update' mode disabled" "$HOME/.zshrc"; then
         sed -i "s/^zstyle ':omz:update' mode disabled/# zstyle ':omz:update' mode disabled/g" "$HOME/.zshrc"
     fi
 
     # Disable reminders
-    printf '%s\n' "Disabling reminders..."
+    printf '%s\n' "${BLUE}Disabling reminders...${RESET}"
     if grep -qE "^zstyle ':omz:update' mode reminder" "$HOME/.zshrc"; then
         sed -i "s/^zstyle ':omz:update' mode reminder/# zstyle ':omz:update' mode reminder/g" "$HOME/.zshrc"
     fi
 
     # Set auto-updates
-    printf '%s\n' "Setting auto-updates..."
+    printf '%s\n' "${BLUE}Setting auto-updates...${RESET}"
     if ! grep -qE "zstyle ':omz:update' mode auto" "$HOME/.zshrc"; then
         echo "zstyle ':omz:update' mode auto" >>"$HOME/.zshrc"
     else
@@ -846,7 +976,7 @@ install_oh_my_zsh() {
     fi
 
     # Enable standard frequency, default: 13 days
-    printf '%s\n' "Setting update frequency..."
+    printf '%s\n' "${BLUE}Setting update frequency...${RESET}"
     if ! grep -qE "zstyle ':omz:update' frequency" "$HOME/.zshrc"; then
         echo "zstyle ':omz:update' frequency 13" >>"$HOME/.zshrc"
     elif grep -qE "^# zstyle ':omz:update' frequency" "$HOME/.zshrc"; then
@@ -854,7 +984,7 @@ install_oh_my_zsh() {
     fi
 
     # Update the users RPROMPT to be blank
-    printf '%s\n' "Setting RPROMPT to be blank..."
+    printf '%s\n' "${BLUE}Setting RPROMPT to be blank...${RESET}"
     if ! grep -qE "RPROMPT=" "$HOME/.zshrc"; then
         echo "RPROMPT=" >>"$HOME/.zshrc"
     else
@@ -862,12 +992,12 @@ install_oh_my_zsh() {
     fi
 
     # Update the users prompt to be only be '[%~] $ '
-    printf '%s\n' "Setting minimalistic PROMPT for users shell prompt..."
+    printf '%s\n' "${BLUE}Setting minimalistic PROMPT for users shell prompt...${RESET}"
     # Check .zshrc for PROMPT but exclude RPRMPT matching
     if ! grep -qE "\bPROMPT=" "$HOME/.zshrc"; then
         echo "PROMPT='[%~] \$ '" >>"$HOME/.zshrc"
     else
-        sed -i "s/^PROMPT=.*/PROMPT='[%~] \$ '/g" "$HOME/.zshrc"
+        sed -i "s/^PROMPT=.*/PROMPT='[%~]\$ '/g" "$HOME/.zshrc"
     fi
 
     echo
@@ -885,24 +1015,25 @@ install_arsenal() {
 
     # Check if git is installed
     command_exists git || {
-        fmt_error "git is not installed"
+        error "git is not installed"
         exit 1
     }
 
     # The Windows (MSYS) Git is not compatible with normal use on cygwin
     ostype=$(uname)
     if [ -z "${ostype%CYGWIN*}" ] && git --version | grep -Eq 'msysgit|windows'; then
-        fmt_error "Windows/MSYS Git is not supported on Cygwin"
-        fmt_error "Make sure the Cygwin git package is installed and is first on the \$PATH"
+        error "Windows/MSYS Git is not supported on Cygwin"
+        error "Make sure the Cygwin git package is installed and is first on the \$PATH"
         exit 1
     fi
 
     # Check for --force
     if [ "$FORCE" = yes ]; then
-        echo "Arsenal forced install, nuking previous version..."
+        echo "${YELLOW}Arsenal forced install, nuking previous version...${RESET}"
         rm -rf "$ARSENAL_BASH"
     fi
 
+    # Set current dir to variable
     CURRENT_DIR=$(pwd)
 
     # Check if "$ARSENAL_BASH" is already cloned
@@ -941,11 +1072,11 @@ install_arsenal() {
                 cd "$CURRENT_DIR"
                 rm -rf "$ARSENAL_BASH" 2>/dev/null
             }
-            fmt_error "git clone of arsenal repo failed"
+            error "git clone of arsenal repo failed"
             exit 1
         }
     else
-        fmt_error "The branch '$BRANCH' does not exist in the remote repository."
+        error "The branch '$BRANCH' does not exist in the remote repository."
         exit 1
     fi
 
@@ -956,7 +1087,7 @@ install_arsenal() {
         mkdir -p "$ARSENAL_BASH/bin"
     fi
 
-    echo "Generating symlink farm from Arsenal sources, '$ARSENAL_BASH/src'..."
+    echo "${BLUE}Generating symlink farm from Arsenal sources, '$ARSENAL_BASH/src'...${RESET}"
     # Go through each of the scripts within $ARSENAL_BASH/src, taking each of them
     # checking which have valid shebangs, and then symlinking them to $ARSENAL_BASH/bin
     # with the script name without the extension. This allows us to update the scripts
@@ -987,7 +1118,7 @@ install_arsenal() {
         fi
     done
 
-    echo "Validating symlinks from symlink farm for any discrepancies..."
+    echo "${BLUE}Validating symlinks from symlink farm for any discrepancies...${RESET}"
     # Locate all symlinks from $ARSENAL_BASH/bin and remove those that don't have
     # a corresponding script that is a valid executable file in $ARSENAL_BASH/src
     for symlink in "$ARSENAL_BASH/bin"/*; do
@@ -1003,8 +1134,10 @@ install_arsenal() {
     done
 
     # Append the Arsenal script path to the dot file if not already present
-    if ! grep -q -E "PATH=.*$ARSENAL_BASH/bin" "$dot_file"; then
+    echo "${BLUE}Appending Arsenal bin to PATH in dot file... ($dot_file)${RESET}"
+    if ! grep -qE "PATH=.*$ARSENAL_BASH/bin" "$dot_file"; then
         echo "${YELLOW}Added Arsenal scripts to PATH in ${dot_file}${RESET}"
+        echo "# Added by Arsenal" >>"$dot_file"
         echo "export PATH=\"\$PATH:$ARSENAL_BASH/bin\"" >>"$dot_file"
     fi
 
@@ -1013,11 +1146,8 @@ install_arsenal() {
     echo
 }
 
-TOYBOX_REPO='drampil/toy-box'
-TOYBOX_BRANCH="main"
-TOYBOX_RAW_REMOTE="https://raw.githubusercontent.com/${TOYBOX_REPO}/${TOYBOX_BRANCH}"
 install_toybox_scripts() {
-    echo "Installing toy-box scripts..."
+    echo "${BLUE}Installing toy-box scripts...${RESET}"
 
     ARSENAL_TOYBOX="$ARSENAL_BASH/toybox"
     if [ ! -d "$ARSENAL_TOYBOX" ]; then
@@ -1071,43 +1201,6 @@ install_toybox_scripts() {
     echo
 }
 
-# Unified way of setting sudo to a variable
-if am_root; then
-    sudo=""
-elif can_root; then
-    sudo="sudo"
-else
-    sudo=""
-fi
-
-print_header() {
-    printf "%s                                    __%s\n" "$RED" "$RESET"
-    printf "%s  ____ ______________  ____  ____ _/ /%s\n" "$RED" "$RESET"
-    printf "%s / __  / ___/ ___/ _ \/ __ \/ __/ / / %s\n" "$RED" "$RESET"
-    printf "%s/ /_/ / /  (__  )  __/ / / / /_/ / /  %s\n" "$RED" "$RESET"
-    printf "%s\__,_/_/  /____/\___/_/ /_/\__,_/_/   %s\n" "$RED" "$RESET"
-}
-
-# shellcheck disable=SC2183  # printf string has more %s than arguments ($RAINBOW expands to multiple arguments)
-print_success() {
-    print_header
-    printf '%s      ...is now installed!            %s\n' "$GREEN" "$RESET"
-    printf '\n'
-    printf '\n'
-    printf '%s %s %s\n' \
-        "Before you go all ${BOLD}${YELLOW}Hacking the Gibson${RESET} with your new tools," \
-        "we recommend you look over your $(fmt_code "$(fmt_link "$dot_file" "file://$dot_file" --text)") " \
-        "file to ensure your options haven't been broken."
-    printf '\n'
-    printf '%s\n' "• Check out the Arsenal Wiki: $(fmt_link @arsenal https://github.com/xransum/arsenal/wiki)"
-    printf '\n'
-    printf '%s\n' "Get started by using the command:"
-    printf '%s\n' "  ${BOLD}$(fmt_code arsenal --help)${RESET}"
-    printf '\n'
-    printf '%s %s\n' "Happy scripting!" "${BOLD}${GREEN}Hack the Plant${RESET}!"
-    printf '%s\n' "$RESET"
-}
-
 main() {
     # Run as unattended if stdin is not a tty
     if [ ! -t 0 ]; then
@@ -1123,18 +1216,18 @@ main() {
             rm -rf "$ARSENAL_BASH" 2>/dev/null
 
         else
-            if [ "$custom_bash" = yes ]; then
+            if [ "$CUSTOM_BASH" = yes ]; then
                 cat <<EOF
 
 You ran the installer with the \$ARSENAL_BASH setting or the \$ARSENAL_BASH variable is
 exported. You have 3 options:
 
 1. Unset the ARSENAL_BASH variable when calling the installer:
-   $(fmt_code "ARSENAL_BASH= sh install.sh")
+   $(code "ARSENAL_BASH= sh install.sh")
 2. Install Arsenal to a directory that doesn't exist yet:
-   $(fmt_code "ARSENAL_BASH=path/to/new/arsenal/folder sh install.sh")
+   $(code "ARSENAL_BASH=path/to/new/arsenal/folder sh install.sh")
 3. (Caution) If the folder doesn't contain important information,
-   you can just remove it with $(fmt_code "rm -r $ARSENAL_BASH")
+   you can just remove it with $(code "rm -r $ARSENAL_BASH")
 
 EOF
             else
@@ -1142,10 +1235,10 @@ EOF
                 echo "${BOLD}${YELLOW}Uh-oh!${RESET} ${BOLD}It looks like you already have Arsenal installed!${RESET}"
                 echo ""
                 echo "This can be fixed with either of the following options:"
-                echo "1. Run the installer with the ${YELLOW}$(fmt_code "--force")${RESET}:"
+                echo "1. Run the installer with the ${YELLOW}$(code "--force")${RESET}:"
                 echo ""
                 echo "2. Remove the previous version of Arsenal manually:"
-                echo "  ${YELLOW}$(fmt_code "rm -rf $ARSENAL_BASH")${RESET}"
+                echo "  ${YELLOW}$(code "rm -rf $ARSENAL_BASH")${RESET}"
                 echo ""
             fi
             exit 1
@@ -1160,7 +1253,7 @@ EOF
     setup_colors
     install_linux_dependencies
     install_python_dependencies
-    change_users_shell
+    set_default_zsh
     install_oh_my_zsh
     install_arsenal
     install_toybox_scripts
@@ -1174,7 +1267,7 @@ EOF
 
     # Bounce into a fresh shell for the users prefered default
     # shell
-    exec $(running_shell) -l
+    exec $(default_shell) -l
     #exec bash -l
 }
 
