@@ -256,9 +256,9 @@ git remote -v | while read remote url extra; do
     esac
 
     # If we reach this point we have found the proper arsenal upstream remote. If we don't,
-    # we'll only update from the set remote if `oh-my-zsh.remote` has been set to a remote,
+    # we'll only update from the set remote if `arsenal.remote` has been set to a remote,
     # as when installing from a fork.
-    git config --local oh-my-zsh.remote "$remote"
+    git config --local arsenal.remote "$remote"
     break
 done
 
