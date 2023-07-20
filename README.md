@@ -6,6 +6,18 @@ A set of scripts and tools to be use for investigating abuse on the cloud.
 -   security: check /.well-known/security.txt
 -   netcheck: check if ip is within netrange
 
+## Installation
+
+```bash
+bash <(curl -skL https://raw.githubusercontent.com/xransum/arsenal/master/install.sh)
+```
+
+## Usage
+
+```bash
+arsenal
+```
+
 ## Benefits
 
 -   Easy to install, remove and update.
