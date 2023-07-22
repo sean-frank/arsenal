@@ -6,8 +6,8 @@ A set of scripts and tools to be use for investigating abuse on the cloud.
 
 > Work in Progress
 
-- **curls**: checks urls status, with proper sanity checks for dangerous content.
-- **malvera**: downloadless verification of a URL for potential malicious data
+- **sniper**: checks status of urls, follows redirects, and inspects page contents for meta redirects.
+- **spotter**: checks urls status, with proper sanity checks for dangerous content.
 - **digs**: checks host info for an ip address(es).
 - **whobe**: get the whois/rdap/arin for a domain or ip addr, determines the netloc owner for the matching subnet of the ip.
 - **geoip**: get the geo location info for a given domain.
@@ -25,6 +25,7 @@ A set of scripts and tools to be use for investigating abuse on the cloud.
 - **sentry**: interactive and easily adaptive vuln checks and port scans (enforced unobtrusive scans only)
 - **blister**: checks top email, domain, and ip addr blacklistings for a given email, domain, or ip addr
 - **netcheck**: check if ip is within netrange
+- **malvera**: downloadless verification of a URL for potential malicious data
 
 ## Installation
 
