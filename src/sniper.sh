@@ -380,6 +380,10 @@ for i in "${!args[@]}"; do
         fi
 
         trailing=""
+        if [ "$redirected" = false ]; then
+            datetime=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+            trailing=" at ${YELLOW}${datetime}${RESET}"
+        fi
 
         printf '%s\n' "${leading} ${BOLD}${url}${RESET}${trailing}"
 
