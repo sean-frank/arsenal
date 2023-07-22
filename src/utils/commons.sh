@@ -117,8 +117,18 @@ code() {
     is_tty && printf '`\033[2m%s\033[22m`\n' "$*" || printf '`%s`\n' "$*"
 }
 
+warn() {
+    printf '%sWarning: %s%s\n' "${BOLD}${YELLOW}" "$*" "$RESET" >&2
+}
+
 error() {
     printf '%sError: %s%s\n' "${BOLD}${RED}" "$*" "$RESET" >&2
+}
+
+debug() {
+    if [ "$verbosity" = verbose ]; then
+        printf '%s%s%s\n' "${BOLD}${YELLOW}[${__name__}]: " "$*" "$RESET" >&2
+    fi
 }
 
 setup_colors() {
