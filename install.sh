@@ -531,15 +531,8 @@ backup_dot_file() {
 
     if [ "$num_backups" -ge "$max_backups" ]; then
         oldest_backup=$(ls -1t "${dot_file}.pre-arsenal"* 2>/dev/null | tail -n 1)
-        echo "${RED}The oldest backup (${oldest_backup}) is about to be rotated out.${RESET}"
-        echo "${YELLOW}Do you want to continue? (y/n)${RESET}"
-        read -r confirm
-        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-            echo "${RED}Backup operation aborted.${RESET}"
-            return
-        fi
+        echo "${RED}Maximum backups reached, the oldest backup (${oldest_backup}) has been rotated out.${RESET}"
         rm "$oldest_backup"
-        echo "${RED}Oldest backup (${oldest_backup}) has been removed.${RESET}"
     fi
 
     backup_dot_file="${dot_file}.pre-arsenal-$(date +%Y-%m-%d_%H-%M-%S)"
