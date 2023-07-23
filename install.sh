@@ -259,7 +259,11 @@ command_exists() {
 # in sudo su. This is a hack to work around for any Linux
 # operating systems
 running_user() {
-    if command_exists logname; then
+    # Check if the script is running in WSL
+    if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
+        # If running in WSL, use whoami to get the current user
+        whoami
+    elif command_exists logname; then
         logname
     elif [ -n "${SUDO_USER:-}" ]; then
         echo "$SUDO_USER"
@@ -650,10 +654,10 @@ install_linux_dependencies() {
         exit 1
     fi
 
-    printf '%s\n' "${BLUE}Download package information from all package sources...${RESET}"
+    printf '%s\n' "${BLUE}Checking package sources for updates...${RESET}"
     # Debian
     if command_exists apt-get; then
-        if $sudo apt-get update -y 2>&1 >/dev/null | grep -vE 'Unable to locate|no installation candidate'; then
+        if $sudo apt-get update -y 2>&1 >/dev/null; then
             echo "Package information updated successfully."
         else
             echo "Package information update failed."
@@ -676,37 +680,43 @@ install_linux_dependencies() {
         exit 1
     fi
 
-    printf '%s\n' "${BLUE}Installing packages dependencies...${RESET}"
+    tmp=$(mktemp -d /tmp/arsenal.XXXXXXXXXX)
+    printf '%s\n' "${BLUE}Installing system dependencies...${RESET}"
     for dep in $DEPENDENCIES; do
-        echo -n "Installing $dep... "
+        echo -n "Installing ${BLUE}${dep}${RESET}... "
 
         # Debian
         if command_exists apt-get; then
-            if $sudo apt-get install -y "$dep" 2>&1 >/dev/null; then
-                echo "Done."
+            # I hate this, but it's the only optimal solution since stderr doesn't
+            # seem to be redirected properly to stdout when I do "2>&1 >/dev/null"
+            if $sudo apt-get install -y "$dep" 2>"$tmp"/apt_error_log >/dev/null; then
+                echo "${GREEN}Done${RESET}."
             else
-                echo "Failed."
+                echo "${YELLOW}Skipping...${RESET}"
             fi
         # CentOS
         elif command_exists yum; then
             # For CentOS 7, we need to install git from a different repo,
             # but only if it's git and git version is 1.x
+
             if [ "$dep" = "git" ] && [ "$(cat /etc/os-release | grep -oP '(?<=VERSION_ID=")\d+' | head -n 1)" = "7" ] && [ "$(git --version | grep -oP '(?<=git version )\d+' | head -n 1)" = "1" ]; then
                 # This is entirely a me problem and the fact that I natively use CentOS 7
                 # and git 1.x is the default. I'm not going to bother with CentOS 8
                 $sudo yum remove git -y 2>&1 >/dev/null
                 $sudo rpm -U http://opensource.wandisco.com/centos/7/git/x86_64/wandisco-git-release-7-2.noarch.rpm
                 $sudo yum install git -y 2>&1 >/dev/null
-                echo "Done."
+                echo "${GREEN}Done${RESET}."
             else
-                if ! $sudo yum install -y "$dep" 2>&1 | grep -q "Error: Nothing to do" >/dev/null; then
-                    echo "Done."
+                if $sudo yum install -y "$dep" 2>"$tmp"/yum_error_log >/dev/null; then
+                    echo "${GREEN}Done${RESET}."
                 else
-                    echo "Failed."
+                    echo "${YELLOW}Skipping...${RESET}"
                 fi
             fi
         fi
     done
+
+    rm -rf "$tmp"
 
     if [ $? -ne 0 ]; then
         error "Failed to install linux dependencies. Please install them manually."
@@ -803,19 +813,21 @@ install_python_dependencies() {
     # Update pip to latest version
     echo -n "Upgrading Python pip... "
     if $pip install --upgrade --no-input $pargs pip 2>&1 >/dev/null; then
-        echo "Done."
+        echo "${GREEN}Done${RESET}."
     else
-        echo "Failed. Skipping..."
+        echo "${YELLOW}Failed${RESET}. Ignoring..."
     fi
 
     # Install dependencies
     printf '%s\n' "${BLUE}Installing Python packages...${RESET}"
     for package in $DEPENDENCIES; do
         echo -n "Installing package [$package]... "
+        # --no-warn-script-location --no-python-version-warning
+        # deprecation warnings seem to only be thrown when run on WSL
         if $pip install --upgrade --no-input $pargs "$package" 2>&1 >/dev/null; then
-            echo "Done."
+            echo "${GREEN}Done${RESET}."
         else
-            echo "Failed. Skipping..."
+            echo "${YELLOW}Failed${RESET}. Ignoring..."
         fi
     done
 
@@ -1103,7 +1115,7 @@ install_arsenal() {
             if [ ! -x "$script" ]; then
                 chmod +x "$script"
             else
-                echo "Script '$script' is already executable, skipping..."
+                echo "${YELLOW}Script '$script' is already executable, skipping...${RESET}"
             fi
 
             # If the script doesn't exist, create it
@@ -1114,7 +1126,7 @@ install_arsenal() {
                 echo "There was a possible script collision, symlink exists already for '$script' to '$script_name'."
             fi
         else
-            echo "Script '$script' does not contain a valid shebang, skipping..."
+            echo "${YELLOW}Script '$script' does not contain a valid shebang, skipping...${RESET}"
         fi
     done
 
@@ -1267,7 +1279,10 @@ EOF
 
     # Bounce into a fresh shell for the users prefered default
     # shell
-    exec $(default_shell) -l
+    if [ "$CHSH" = yes ]; then
+        echo "${YELLOW}Changing default shell to $(default_shell).${RESET}"
+        exec $(default_shell) -l
+    fi
     #exec bash -l
 }
 
