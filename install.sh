@@ -215,6 +215,8 @@ Arguments:
   --unattended      Skip changing the shell and running zsh after install
   --keep-bashrc     Keep the existing .bashrc file
   --no-deps         Skip installing dependencies
+  --no-py           Skip installing Python dependencies
+  --no-pydeps       Skip installing Python dependencies
   --force           Skip the prompt and install Arsenal
   --branch          Install a specific branch (default: master)
   --help            Show this help message
@@ -252,6 +254,21 @@ print_success() {
 # Check command exists easily
 command_exists() {
     command -v "$@" >/dev/null 2>&1
+}
+
+# Function to display a loading bar until the process is finished
+display_loading_bar() {
+    local pid=$1
+    local duration=$2
+    local message=$3
+    local chars='/-\|'
+    while kill -0 "$pid" >/dev/null 2>&1; do
+        for ((i = 0; i <= $duration; i++)); do
+            sleep 0.1
+            echo -ne "${message} [${chars:$((i % ${#chars})):1}] \\r"
+        done
+    done
+    echo
 }
 
 # A function for universally setting RUNNING_USER to the user
@@ -501,17 +518,31 @@ setup_dot_rc() {
 
 # Backup the user's original dot file
 backup_dot_file() {
-    # Skip backup if the user wants or stdin is closed (not running interactively).
     if [ "$RUNBASH" = no ]; then
         return
     fi
 
-    # Get specific file from args
     dot_file="$1"
 
     echo "${BLUE}Looking for an existing shell config file (${dot_file})...${RESET}"
-    # Backup the user's original dot file
-    backup_dot_file="${dot_file}.pre-arsenal"
+
+    num_backups=$(ls -1 "${dot_file}.pre-arsenal"* 2>/dev/null | wc -l)
+    max_backups=5
+
+    if [ "$num_backups" -ge "$max_backups" ]; then
+        oldest_backup=$(ls -1t "${dot_file}.pre-arsenal"* 2>/dev/null | tail -n 1)
+        echo "${RED}The oldest backup (${oldest_backup}) is about to be rotated out.${RESET}"
+        echo "${YELLOW}Do you want to continue? (y/n)${RESET}"
+        read -r confirm
+        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+            echo "${RED}Backup operation aborted.${RESET}"
+            return
+        fi
+        rm "$oldest_backup"
+        echo "${RED}Oldest backup (${oldest_backup}) has been removed.${RESET}"
+    fi
+
+    backup_dot_file="${dot_file}.pre-arsenal-$(date +%Y-%m-%d_%H-%M-%S)"
     if [ -f "$dot_file" ] || [ -h "$dot_file" ]; then
         if [ "$KEEP_DOT_FILE" = yes ]; then
             echo "${YELLOW}Found ${dot_file}.${RESET} ${GREEN}Keeping...${RESET}"
@@ -519,17 +550,9 @@ backup_dot_file() {
         fi
 
         if [ -e "$backup_dot_file" ]; then
-            old_backup_dot_file="${backup_dot_file}-$(date +%Y-%m-%d_%H-%M-%S)"
-            if [ -e "$old_backup_dot_file" ]; then
-                error "$old_backup_dot_file exists. Can't back up ${backup_dot_file}"
-                error "Re-run the installer again in a few seconds."
-                exit 1
-            fi
-
-            mv "$backup_dot_file" "$old_backup_dot_file"
-
-            echo "${YELLOW}Found old ${dot_file}.pre-arsenal." \
-                "${GREEN}Backing up to ${old_backup_dot_file}${RESET}"
+            error "$backup_dot_file exists. Can't back up ${backup_dot_file}"
+            error "Re-run the installer again in a few seconds."
+            exit 1
         fi
 
         echo "${YELLOW}Found ${dot_file}.${RESET} ${GREEN}Backing up to ${backup_dot_file}${RESET}"
@@ -544,7 +567,8 @@ KEEP_BASHRC=${KEEP_BASHRC:-no}
 FORCE=${FORCE:-no}
 SKIP_OMZ=${SKIP_OMZ:-no}
 NO_DEPS=${NO_DEPS:-no}
-NO_PY_DEPS=${NO_PY_DEPS:-no}
+NO_PY=${NO_PY:-no}
+NO_PYDEPS=${NO_PYDEPS:-no}
 BRANCH=${BRANCH:-master}
 
 # parse command line arguments
@@ -564,7 +588,10 @@ while [ $# -gt 0 ]; do
         NO_DEPS=yes
         ;;
     --no-py)
-        NO_PY_DEPS=yes
+        NO_PY=yes
+        ;;
+    --no-pydeps)
+        NO_PYDEPS=yes
         ;;
     --force)
         FORCE=yes
@@ -622,6 +649,9 @@ TOYBOX_REPO='drampil/toy-box'
 TOYBOX_BRANCH="main"
 TOYBOX_RAW_REMOTE="https://raw.githubusercontent.com/${TOYBOX_REPO}/${TOYBOX_BRANCH}"
 
+USER_LOCAL="$ARSENAL_DOT/.local"
+PYTHON_VERSION="3.8.7"
+
 cd "$ARSENAL_DOT" || exit 1
 
 # Unified way of setting sudo to a variable
@@ -633,6 +663,7 @@ else
     sudo=""
 fi
 
+# Install all the necessary system dependencies
 install_linux_dependencies() {
     # Skip setup if the user wants or stdin is closed (not running interactively).
     if [ "$NO_DEPS" = yes ]; then
@@ -683,7 +714,7 @@ install_linux_dependencies() {
     tmp=$(mktemp -d /tmp/arsenal.XXXXXXXXXX)
     printf '%s\n' "${BLUE}Installing system dependencies...${RESET}"
     for dep in $DEPENDENCIES; do
-        echo -n "Installing ${BLUE}${dep}${RESET}... "
+        echo -n "Installing [${dep}]... "
 
         # Debian
         if command_exists apt-get; then
@@ -692,7 +723,7 @@ install_linux_dependencies() {
             if $sudo apt-get install -y "$dep" 2>"$tmp"/apt_error_log >/dev/null; then
                 echo "${GREEN}Done${RESET}."
             else
-                echo "${YELLOW}Skipping...${RESET}"
+                echo "${YELLOW}Skipping.${RESET}"
             fi
         # CentOS
         elif command_exists yum; then
@@ -710,7 +741,7 @@ install_linux_dependencies() {
                 if $sudo yum install -y "$dep" 2>"$tmp"/yum_error_log >/dev/null; then
                     echo "${GREEN}Done${RESET}."
                 else
-                    echo "${YELLOW}Skipping...${RESET}"
+                    echo "${YELLOW}Skipping.${RESET}"
                 fi
             fi
         fi
@@ -765,15 +796,133 @@ check_pip_requires_user() {
     return 1
 }
 
+# Function for installing Python3 to the user's home .local directory
+install_python_locally() {
+    if [ "$NO_PY" = yes ]; then
+        printf '%s\n' "${YELLOW}Skipping python installation.${RESET}"
+        return
+    fi
+
+    printf '%s\n' "${BLUE}Installing Python ${PYTHON_VERSION} locally... This may take a few minutes.${RESET}"
+
+    PY_FTP_BASE="https://www.python.org/ftp/python"
+    PY_FTP_URL="${PY_FTP_BASE}/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz"
+    PY_TGZ="$(basename "${PY_FTP_URL}")"    # Python-3.10.1.tgz
+    PYTHON_DIR="$(basename "$PY_TGZ" .tgz)" # Python-3.10.1
+    PY_SOURCE_DIR="${USER_LOCAL}/${PYTHON_DIR}"
+    PY_COMPILED="${USER_LOCAL}/python${PYTHON_VERSION}"
+
+    printf '\n%s\n%s\n%s\n\n' "${YELLOW}Please be patient, we require that Python3 be installed locally to the user.${RESET}" \
+        "${YELLOW}This prevents headaches where systems have Python3 installed in a location requiring root access.${RESET}" \
+        "${YELLOW}If you do not want this behavior, please use the $(code "--no-py") flag.${RESET}"
+
+    # Verify if the version exists on the Python website
+    echo "Verifying Python version ${PYTHON_VERSION}..."
+    if ! curl -skLf "$PY_FTP_URL" >/dev/null; then
+        echo "Python version ${PYTHON_VERSION} does not exist on the Python website."
+        exit 1
+    fi
+
+    # Check if source exists and remove it
+    if [ -d "$PY_SOURCE_DIR" ]; then
+        echo "Removing existing source directory: $PY_SOURCE_DIR"
+        rm -rf "$PY_SOURCE_DIR"
+    fi
+
+    # Check if compiled exists and prompt to use --force or use "rm -rf .local/python3.10.1"
+    if [ -d "$PY_COMPILED" ] && [ "$FORCE" = yes ]; then
+        echo "Removing existing compiled directory: $PY_COMPILED"
+        rm -rf "$PY_COMPILED"
+    fi
+
+    # Check if compiled does not exist and compile Python
+    if [ ! -d "$PY_COMPILED" ]; then
+        # 1. Download Python
+        echo "Downloading Python ${PYTHON_VERSION}..."
+        if ! curl -skL "$PY_FTP_URL" -o "$PY_TGZ"; then
+            echo "Failed to download $PY_FTP_URL."
+            exit 1
+        else
+            echo "Successfully downloaded"
+        fi
+
+        if [ ! -d "$USER_LOCAL" ]; then
+            mkdir -p "$USER_LOCAL"
+        fi
+
+        # 2. Uncompress tarball
+        tar -xzf "$PY_TGZ" -C "$USER_LOCAL"
+
+        # 3. Compile source quietly unless --verbose enabled to .local
+        echo "Compiling Python ${PYTHON_VERSION}..."
+
+        PREVIOUS_DIR="$(pwd)"
+
+        cd "$PY_SOURCE_DIR"
+
+        # Configure Python
+        if [ "$VERBOSE" = yes ]; then
+            ./configure --prefix="$PY_COMPILED" &
+        else
+            CFLAGS="-w" ./configure --prefix="$PY_COMPILED" 2>&1 >python_configure.log &
+        fi
+        pid=$!
+        display_loading_bar $pid 20 "Generating build configs, please wait..."
+        wait $pid
+
+        cores=$(getconf _NPROCESSORS_ONLN)
+
+        # Make Python
+        if [ "$VERBOSE" = yes ]; then
+            make -j"$cores" &
+        else
+            make -j"$cores" 2>&1 >python_make.log &
+        fi
+        pid=$!
+        display_loading_bar $pid 20 "Generating job tasks for make using $cores cores, please wait..."
+        wait $pid
+
+        # Install Python
+        if [ "$VERBOSE" = yes ]; then
+            make install &
+        else
+            make install 2>&1 >python_make_install.log &
+        fi
+        pid=$!
+        display_loading_bar $pid 20 "Building Python from source, please wait..."
+        wait $pid
+
+        cd "$PREVIOUS_DIR"
+
+        # Check if source exists and remove it
+        if [ -d "$PY_SOURCE_DIR" ]; then
+            echo "Removing existing source directory: $PY_SOURCE_DIR"
+            rm -rf "$PY_SOURCE_DIR"
+        fi
+    else
+        echo "Python version ${PYTHON_VERSION} is already compiled."
+        echo "Use --force to recompile Python ${PYTHON_VERSION}."
+    fi
+
+    # 4. Check users dotfile for binaries path, add if missing
+    if ! grep -q "export PATH=\$HOME/.local/python${PYTHON_VERSION}/bin:\$PATH" "$dot_file"; then
+        echo "export PATH=\$HOME/.local/python${PYTHON_VERSION}/bin:\$PATH" >>"$dot_file"
+    fi
+
+    # 5. Export new PATH so packages are installed
+    export PATH="$PY_COMPILED/bin:$PATH"
+}
+
+# Function for installing Python3 dependencies
 install_python_dependencies() {
     # Skip setup if the user wants or stdin is closed (not running interactively).
-    if [ "$NO_PY_DEPS" = yes ]; then
+    if [ "$NO_PYDEPS" = yes ]; then
         printf '%s\n' "${YELLOW}Skipping python dependencies installation.${RESET}"
         return
     fi
 
     if ! (command_exists python3 || command_exists pip3); then
-        error "Sorry, Arsenal only supports Python3 at this time. Skipping..."
+        error "Sorry, Arsenal only supports Python3 at this time. Skipping."
         return
     fi
 
@@ -787,32 +936,32 @@ install_python_dependencies() {
     fi
 
     # Set pip path to pip3 if it exists, otherwise python3 -m pip
-    pip=
-    if command_exists python3; then
-        pip="python3 -m pip"
-    elif command_exists pip3; then
-        pip="pip3"
-    # Require python3 and pip3 to be installed
-    # TODO: Add verification that python3 has the pip module installed
-    else
-        error "Sorry, Arsenal requires pip3 or python3 to be installed. Skipping..."
-        return
-    fi
+    pip="python3 -m pip"
+    # if command_exists python3; then
+    #     pip="python3 -m pip"
+    # elif command_exists pip3; then
+    #     pip="pip3"
+    # # Require python3 and pip3 to be installed
+    # # TODO: Add verification that python3 has the pip module installed
+    # else
+    #     error "Sorry, Arsenal requires pip3 or python3 to be installed. Skipping."
+    #     return
+    # fi
 
     # Check if sudo is required for installing Python3 packages
-    if check_python3_sudo; then
-        pip="$sudo $pip"
-    fi
+    # if check_python3_sudo; then
+    #     pip="$sudo $pip"
+    # fi
 
-    unset pargs
+    pargs=""
     # Check if pip requires --user flag for installing Python3 packages
-    if check_pip_requires_user; then
-        pargs="--user"
-    fi
+    # if check_pip_requires_user; then
+    # pargs="--user"
+    # fi
 
     # Update pip to latest version
     echo -n "Upgrading Python pip... "
-    if $pip install --upgrade --no-input $pargs pip 2>&1 >/dev/null; then
+    if $pip install --upgrade --no-input pip 2>&1 >/dev/null; then
         echo "${GREEN}Done${RESET}."
     else
         echo "${YELLOW}Failed${RESET}. Ignoring..."
@@ -824,7 +973,7 @@ install_python_dependencies() {
         echo -n "Installing package [$package]... "
         # --no-warn-script-location --no-python-version-warning
         # deprecation warnings seem to only be thrown when run on WSL
-        if $pip install --upgrade --no-input $pargs "$package" 2>&1 >/dev/null; then
+        if $pip install --upgrade --no-input "$package" 2>&1 >/dev/null; then
             echo "${GREEN}Done${RESET}."
         else
             echo "${YELLOW}Failed${RESET}. Ignoring..."
@@ -841,6 +990,7 @@ install_python_dependencies() {
     echo
 }
 
+# Install the oh-my-zsh framework for zsh
 install_oh_my_zsh() {
     # Install oh-my-zsh base
     printf '%s\n' "${BLUE}Installing oh-my-zsh...${RESET}"
@@ -960,7 +1110,7 @@ install_oh_my_zsh() {
     printf '%s\n' "${BLUE}Enabling default plugins, to enable more plugins, please edit ~/.zshrc manually.${RESET}"
     # Set default enabled plugins
     #PLUGIN_NAMES="git zsh-autosuggestions zsh-completions zsh-autocomplete"
-    PLUGIN_NAMES="git"
+    PLUGIN_NAMES="git zsh-autosuggestions"
     if ! grep -qE "plugins=\(.*\)" "$HOME/.zshrc"; then
         echo "plugins=($PLUGIN_NAMES)" >>"$HOME/.zshrc"
     else
@@ -1015,6 +1165,7 @@ install_oh_my_zsh() {
     echo
 }
 
+# Install the arsenal repository
 install_arsenal() {
     # Prevent the cloned repository from having insecure permissions. Failing to do
     # so causes compinit() calls to fail with "command not found: compdef" errors
@@ -1115,7 +1266,7 @@ install_arsenal() {
             if [ ! -x "$script" ]; then
                 chmod +x "$script"
             else
-                echo "${YELLOW}Script '$script' is already executable, skipping...${RESET}"
+                echo "${YELLOW}Script '$script' is already executable, Skipping.${RESET}"
             fi
 
             # If the script doesn't exist, create it
@@ -1126,7 +1277,7 @@ install_arsenal() {
                 echo "There was a possible script collision, symlink exists already for '$script' to '$script_name'."
             fi
         else
-            echo "${YELLOW}Script '$script' does not contain a valid shebang, skipping...${RESET}"
+            echo "${YELLOW}Script '$script' does not contain a valid shebang, Skipping.${RESET}"
         fi
     done
 
@@ -1158,6 +1309,7 @@ install_arsenal() {
     echo
 }
 
+# Install the toy-box scripts
 install_toybox_scripts() {
     echo "${BLUE}Installing toy-box scripts...${RESET}"
 
@@ -1197,7 +1349,7 @@ install_toybox_scripts() {
                 echo "Script $script_name has changed, updating..."
                 mv "$tmp_file" "$script_path"
             else
-                echo "Script $script_name has not changed, skipping..."
+                echo "Script $script_name has not changed, Skipping."
                 rm "$tmp_file"
             fi
         fi
@@ -1214,6 +1366,7 @@ install_toybox_scripts() {
 }
 
 main() {
+    PRE_DIR=$(pwd)
     # Run as unattended if stdin is not a tty
     if [ ! -t 0 ]; then
         RUNBASH=no
@@ -1264,13 +1417,17 @@ EOF
 
     setup_colors
     install_linux_dependencies
-    install_python_dependencies
+    #install_python_dependencies
     set_default_zsh
     install_oh_my_zsh
+    install_python_locally
+    install_python_dependencies
     install_arsenal
     install_toybox_scripts
 
     print_success
+
+    cd "$PRE_DIR"
 
     if [ "$RUNBASH" = no ]; then
         echo "${YELLOW}Run bash to try it out.${RESET}"
