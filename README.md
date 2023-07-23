@@ -37,7 +37,7 @@ Flags:
 - `--no-py`: skip python package installs
 - `--force`: force install, no confirmations
 
-## Installation
+## Uninstallation
 
 ```bash
 bash <(curl -skL https://raw.githubusercontent.com/xransum/arsenal/master/uninstall.sh)
