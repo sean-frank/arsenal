@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ./install.sh
 #
 # This script should be run via curl:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/xransum/arsenal/master/install.sh)
@@ -1091,7 +1092,7 @@ install_oh_my_zsh() {
     echo
     echo "${BLUE}Setting configs, please wait...${RESET}"
 
-    echo "${BLUE}Setting theme to mh...${RESET}"
+    echo "Setting theme to mh..."
     # Set theme to mh, it's the least obstructive and doesn't require
     # 3rd party fonts to view non-ascii chars.
     if ! grep -qE 'ZSH_THEME=".*"' "$HOME/.zshrc"; then
@@ -1100,7 +1101,7 @@ install_oh_my_zsh() {
         sed -i 's/^ZSH_THEME=".*"/ZSH_THEME="mh"/g' "$HOME/.zshrc"
     fi
 
-    printf '%s\n' "${BLUE}Enabling default plugins, to enable more plugins, please edit ~/.zshrc manually.${RESET}"
+    printf '%s\n' "Enabling default plugins, to enable more plugins, please edit ~/.zshrc manually."
     # Set default enabled plugins
     #PLUGIN_NAMES="git zsh-autosuggestions zsh-completions zsh-autocomplete"
     PLUGIN_NAMES="git zsh-autosuggestions"
@@ -1111,19 +1112,19 @@ install_oh_my_zsh() {
     fi
 
     # Enforce updates
-    printf '%s\n' "${BLUE}Enforcing updates...${RESET}"
+    printf '%s\n' "Enforcing updates..."
     if grep -qE "^zstyle ':omz:update' mode disabled" "$HOME/.zshrc"; then
         sed -i "s/^zstyle ':omz:update' mode disabled/# zstyle ':omz:update' mode disabled/g" "$HOME/.zshrc"
     fi
 
     # Disable reminders
-    printf '%s\n' "${BLUE}Disabling reminders...${RESET}"
+    printf '%s\n' "Disabling reminders..."
     if grep -qE "^zstyle ':omz:update' mode reminder" "$HOME/.zshrc"; then
         sed -i "s/^zstyle ':omz:update' mode reminder/# zstyle ':omz:update' mode reminder/g" "$HOME/.zshrc"
     fi
 
     # Set auto-updates
-    printf '%s\n' "${BLUE}Setting auto-updates...${RESET}"
+    printf '%s\n' "Setting auto-updates..."
     if ! grep -qE "zstyle ':omz:update' mode auto" "$HOME/.zshrc"; then
         echo "zstyle ':omz:update' mode auto" >>"$HOME/.zshrc"
     else
@@ -1131,7 +1132,7 @@ install_oh_my_zsh() {
     fi
 
     # Enable standard frequency, default: 13 days
-    printf '%s\n' "${BLUE}Setting update frequency...${RESET}"
+    printf '%s\n' "Setting update frequency..."
     if ! grep -qE "zstyle ':omz:update' frequency" "$HOME/.zshrc"; then
         echo "zstyle ':omz:update' frequency 13" >>"$HOME/.zshrc"
     elif grep -qE "^# zstyle ':omz:update' frequency" "$HOME/.zshrc"; then
@@ -1139,7 +1140,7 @@ install_oh_my_zsh() {
     fi
 
     # Update the users RPROMPT to be blank
-    printf '%s\n' "${BLUE}Setting RPROMPT to be blank...${RESET}"
+    printf '%s\n' "Setting RPROMPT to be blank..."
     if ! grep -qE "RPROMPT=" "$HOME/.zshrc"; then
         echo "RPROMPT=" >>"$HOME/.zshrc"
     else
@@ -1147,7 +1148,7 @@ install_oh_my_zsh() {
     fi
 
     # Update the users prompt to be only be '[%~] $ '
-    printf '%s\n' "${BLUE}Setting minimalistic PROMPT for users shell prompt...${RESET}"
+    printf '%s\n' "Setting minimalistic PROMPT for users shell prompt..."
     # Check .zshrc for PROMPT but exclude RPRMPT matching
     if ! grep -qE "\bPROMPT=" "$HOME/.zshrc"; then
         echo "PROMPT='[%~] \$ '" >>"$HOME/.zshrc"
