@@ -184,6 +184,12 @@ setup_colors() {
     BG_RESET=$(printf '\033[49m')
 }
 
+COLORS=("RED" "GREEN" "YELLOW" "BLUE")
+rng_color() {
+    local color=${COLORS[$RANDOM % ${#COLORS[@]}]}
+    printf '%s' "${!color}"
+}
+
 # Initialize term colorization
 setup_colors
 
@@ -201,7 +207,7 @@ display_loading_bar() {
     while kill -0 "$pid" >/dev/null 2>&1; do
         for ((i = 0; i <= $duration; i++)); do
             sleep 0.1
-            echo -ne "${message} [${chars:$((i % ${#chars})):1}] \\r"
+            echo -ne "${message} [$(rng_color)${chars:$((i % ${#chars})):1}${RESET}] \\r"
         done
     done
     echo
