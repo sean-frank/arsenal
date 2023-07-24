@@ -206,8 +206,9 @@ display_loading_bar() {
     local chars='/-\|'
     while kill -0 "$pid" >/dev/null 2>&1; do
         for ((i = 0; i <= $duration; i++)); do
+            cc="${COLORS[$RANDOM % ${#COLORS[@]}]}"
             sleep 0.1
-            echo -ne "${message} [$(rng_color)${chars:$((i % ${#chars})):1}${RESET}] \\r"
+            echo -ne "${message} [${cc}${chars:$((i % ${#chars})):1}${RESET}] \\r"
         done
     done
     echo
@@ -273,6 +274,15 @@ am_root() {
     fi
 }
 
+# Grab running users default shell
+default_shell() {
+    if command_exists getent; then
+        getent passwd "$(running_user)" | cut -d: -f7
+    else
+        grep "^$(running_user):" /etc/passwd | cut -d: -f7
+    fi
+}
+
 defang() {
     echo "$@" | sed 's/ //g' |
         sed 's/h[tx]\{2\}p/http/gi;' |
@@ -280,7 +290,6 @@ defang() {
         sed 's/\[\+:\/\/\]\+/:\/\//g' |
         sed 's/\((@|at)\)/@/gi;' |
         sed 's/\[(@|at)\]/@/gi;'
-
 }
 
 fang() {
