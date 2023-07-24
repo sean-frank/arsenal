@@ -23,7 +23,7 @@ import() {
 
 # dependencies
 import version.sh
-import utils/commons.sh
+import commons.sh
 
 # parse args
 function help {

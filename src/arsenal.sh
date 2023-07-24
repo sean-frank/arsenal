@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ./src/arsenal.sh
 # Description: prints out the arsenal scripts available
+set -e
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SELF_DIR="$(dirname "$SELF")"
@@ -24,7 +25,7 @@ import() {
 
 # dependencies
 import version.sh
-import utils/commons.sh
+import commons.sh
 
 print_header() {
     printf '%s                                    __%s\n' "$RED" "$RESET"
@@ -35,7 +36,6 @@ print_header() {
     printf '\n'
 }
 
-setup_colors
 print_header
 
 printf '%s\n' "Version: ${YELLOW}${__version__}${RESET}"
@@ -54,7 +54,9 @@ printf '%s\n' "Scripts currently available:"
 # name, and print them out
 find "$BIN_DIR" -type l -executable -print0 | sort -z | while read -r -d $'\0' f; do
     script_name=$(basename "$f")
-    printf ' - %s\n' "${YELLOW}${script_name}${RESET}"
+    # get the description from the script, truncate to 50 chars
+    description=$(grep -oP '(?<=^# Description: ).*' "$f" | head -c 50)
+    printf ' - %s\n' "${YELLOW}${script_name}${RESET}: ${description}"
 done
 
 printf '\n'
