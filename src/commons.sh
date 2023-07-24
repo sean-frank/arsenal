@@ -126,7 +126,7 @@ error() {
 }
 
 debug() {
-    if [ "$verbosity" = verbose ]; then
+    if [ "$VERBOSE" = true ]; then
         printf '%s%s%s\n' "${BOLD}${YELLOW}[${__name__}]: " "$*" "$RESET" >&2
     fi
 }
@@ -141,6 +141,11 @@ setup_colors() {
         BLUE=""
         BOLD=""
         RESET=""
+        BG_RED=""
+        BG_GREEN=""
+        BG_YELLOW=""
+        BG_BLUE=""
+        BG_RESET=""
         return
     fi
 
@@ -172,6 +177,11 @@ setup_colors() {
     BLUE=$(printf '\033[34m')
     BOLD=$(printf '\033[1m')
     RESET=$(printf '\033[0m')
+    BG_RED=$(printf '\033[41m')
+    BG_GREEN=$(printf '\033[42m')
+    BG_YELLOW=$(printf '\033[43m')
+    BG_BLUE=$(printf '\033[44m')
+    BG_RESET=$(printf '\033[49m')
 }
 
 # Initialize term colorization
@@ -182,12 +192,31 @@ command_exists() {
     command -v "$@" >/dev/null 2>&1
 }
 
+# Function to display a loading bar until the process is finished
+display_loading_bar() {
+    local pid=$1
+    local duration=$2
+    local message=$3
+    local chars='/-\|'
+    while kill -0 "$pid" >/dev/null 2>&1; do
+        for ((i = 0; i <= $duration; i++)); do
+            sleep 0.1
+            echo -ne "${message} [${chars:$((i % ${#chars})):1}] \\r"
+        done
+    done
+    echo
+}
+
 # A function for universally setting RUNNING_USER to the user
 # even if running with sudo or sudo su $SUDO_USER is not set
 # in sudo su. This is a hack to work around for any Linux
 # operating systems
 running_user() {
-    if command_exists logname; then
+    # Check if the script is running in WSL
+    if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
+        # If running in WSL, use whoami to get the current user
+        whoami
+    elif command_exists logname; then
         logname
     elif [ -n "${SUDO_USER:-}" ]; then
         echo "$SUDO_USER"
