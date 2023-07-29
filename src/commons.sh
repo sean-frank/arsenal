@@ -184,7 +184,7 @@ setup_colors() {
     BG_RESET=$(printf '\033[49m')
 }
 
-COLORS=("RED" "GREEN" "YELLOW" "BLUE")
+COLORS=("$RED" "$GREEN" "$YELLOW" "$BLUE")
 rng_color() {
     local color=${COLORS[$RANDOM % ${#COLORS[@]}]}
     printf '%s' "${!color}"
