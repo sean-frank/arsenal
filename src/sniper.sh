@@ -209,9 +209,9 @@ for i in "${!args[@]}"; do
         depth=$((redirects + 1))
 
         # print the URL pretty
-        leading="(${depth}) >"
+        leading="> (${depth})"
         if [ "$depth" -gt 1 ]; then
-            leading="${leading}>"
+            leading=">${leading}"
         fi
 
         trailing=""
