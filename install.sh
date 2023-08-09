@@ -84,7 +84,7 @@ print_success() {
     printf '%s\n' "Get started by using the command:"
     printf '%s\n' "  ${BOLD}$(code arsenal --help)${RESET}"
     printf '\n'
-    printf '%s %s\n' "Happy scripting!" "${BOLD}${GREEN}Hack the Plant${RESET}!"
+    printf '%s %s\n' "Happy scripting!" "${BOLD}${GREEN}Hack the Planet${RESET}!"
     printf '%s\n' "$RESET"
 }
 
