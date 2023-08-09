@@ -2,6 +2,7 @@ epel-release     # centos: jq, git:2.0+ repos
 build-essential  # debian/ubuntu: gcc, make, etc
 gcc              # rhel/fedora
 libffi-devel     # rhel/fedora: python3-devel
+zlib-devel
 libffi-dev       # debian/ubuntu
 libssl-dev       # debian/ubuntu
 openssl-devel    # rhel/fedora
